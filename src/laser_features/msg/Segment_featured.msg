@@ -1,0 +1,94 @@
+geometry_msgs/Point32[] points
+float32 class_id
+geometry_msgs/Point32 center
+float32 distance
+int32 nearest_neghbour_id
+
+float32 jump_distance_preceeding
+float32 jump_distance_succeeding
+float32 nearest_distance
+float32 sum_of_distances
+
+float32 number_of_points
+float32 std_deviation
+float32 mean_average_deviation_from_median
+float32 width
+float32 linearity
+float32 radius
+float32 circularity
+float32 boundary_length
+float32 boundary_regulatity
+float32 mean_curvature
+float32 mean_angular_difference
+float32 aspect_ratio
+float32 kurtosis
+
+#float32 div_distance_number_of_points
+#float32 div_distance_std_deviation
+#float32 div_distance_mean_average_deviation_from_median
+#float32 div_distance_width
+#float32 div_distance_linearity
+#float32 div_distance_radius
+#float32 div_distance_circularity
+#float32 div_distance_boundary_length
+#float32 div_distance_boundary_regulatity
+#float32 div_distance_mean_curvature
+#float32 div_distance_mean_angular_difference
+#float32 div_distance_aspect_ratio
+#float32 div_distance_kurtosis
+
+#float32 mlp_distance_number_of_points
+#float32 mlp_distance_std_deviation
+#float32 mlp_distance_mean_average_deviation_from_median
+#float32 mlp_distance_width
+#float32 mlp_distance_linearity
+#float32 mlp_distance_radius
+#float32 mlp_distance_circularity
+#float32 mlp_distance_boundary_length
+#float32 mlp_distance_boundary_regulatity
+#float32 mlp_distance_mean_curvature
+#float32 mlp_distance_mean_angular_difference
+#float32 mlp_distance_aspect_ratio
+#float32 mlp_distance_kurtosis
+
+#float32 div_number_std_deviation
+#float32 div_number_mean_average_deviation_from_median
+#float32 div_number_width
+#float32 div_number_linearity
+#float32 div_number_radius
+#float32 div_number_circularity
+#float32 div_number_boundary_length
+#float32 div_number_boundary_regulatity
+#float32 div_number_mean_curvature
+#float32 div_number_mean_angular_difference
+#float32 div_number_aspect_ratio
+#float32 div_number_kurtosis
+
+#float32 mlp_number_std_deviation
+#float32 mlp_number_mean_average_deviation_from_median
+#float32 mlp_number_width
+#float32 mlp_number_linearity
+#float32 mlp_number_radius
+#float32 mlp_number_circularity
+#float32 mlp_number_boundary_length
+#float32 mlp_number_boundary_regulatity
+#float32 mlp_number_mean_curvature
+#float32 mlp_number_mean_angular_difference
+#float32 mlp_number_aspect_ratio
+#float32 mlp_number_kurtosis
+
+
+float32 nn_number_of_points
+float32 nn_std_deviation
+float32 nn_mean_average_deviation_from_median
+float32 nn_width
+float32 nn_linearity
+float32 nn_radius
+float32 nn_circularity
+float32 nn_boundary_length
+float32 nn_boundary_regulatity
+float32 nn_mean_curvature
+float32 nn_mean_angular_difference
+float32 nn_aspect_ratio
+float32 nn_kurtosis
+

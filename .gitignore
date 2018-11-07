@@ -1,0 +1,14 @@
+
+2dlaserdata/
+
+Classifiers/
+
+*.joblib
+
+*.npy
+
+test results/
+
+feature backup/
+
+deleted/
