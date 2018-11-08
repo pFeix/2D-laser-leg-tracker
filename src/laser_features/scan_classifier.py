@@ -171,6 +171,7 @@ def class_visualization(data):
 		
 		class_text_array = MarkerArray()
 		class_text = Marker()
+		class_text.header = data.header
 		class_text.action= class_text.DELETEALL
 		class_text_array.markers.append(class_text)
 		text_marker_pub.publish(class_text_array)

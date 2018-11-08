@@ -1,5 +1,6 @@
 #include "ros/ros.h"
 #include "sensor_msgs/PointCloud.h"
+#include "std_msgs/Header.h"
 #include "laser_features/Featured_segments.h"
 #include "laser_features/Segment_featured.h"
 #include <visualization_msgs/Marker.h>
@@ -11,7 +12,8 @@ private:
 	ros::NodeHandle n;
 	ros::Subscriber sub;
 	ros::Publisher segments_pub;
-	ros::Publisher marker_pub;
+	ros::Publisher target_pub;
+	ros::Publisher pred_way_pub;
 	
 	const static int max_queue_length = 5; 
 	std::queue<laser_features::Featured_segments> segment_queue;
@@ -30,19 +32,30 @@ private:
 	
 	float init_max_distance = 1.5;
 	float scan_max_distance = 1;
+	
+	ros::Time last_time = ros::Time(0);
 
 public:
 
 	SegmentTracking() {
 		  		  	
   	//segments_pub = n.advertise<laser_segmentation::PointCloudSegmented>("/pointcloud_segments",100000, true);
-		marker_pub = n.advertise<visualization_msgs::Marker>("/target_marker", 1, true);
+		target_pub = n.advertise<visualization_msgs::Marker>("/target_marker", 1, true);
+		pred_way_pub = n.advertise<visualization_msgs::Marker>("/pred_way_marker", 1, true);
 		
 		sub = n.subscribe("/classified_segments", 10, &SegmentTracking::pointCloudCallback, this);
 	}
 	   
 	void pointCloudCallback(const laser_features::Featured_segments &msg)
 	{
+		double passed_time = (msg.header.stamp-last_time).toSec();
+		if(last_time == ros::Time(0) || passed_time <= 0.0 || passed_time > 5.0)
+			passed_time = 0.0;
+		last_time = msg.header.stamp;
+		ROS_INFO("passed_time:%lf",passed_time);
+		
+		
+		
 		//segment_queue.push(msg);
 		//while(segment_queue.size() > max_queue_length)
 		//	segment_queue.pop();
@@ -50,7 +63,7 @@ public:
 		//---------------safe measured objects above threshold---------------------------------
 		std::vector<object> measured_objects;
 		for(auto &segment: msg.segments) {
-			ROS_INFO("%f",segment.class_id);
+			//ROS_INFO("%f",segment.class_id);
 			if(segment.class_id >= scan_propability_treshold) {
 				object new_measurement;
 				new_measurement.id = 0;
@@ -73,7 +86,6 @@ public:
 			new_object.id = 0;
 			new_object.distance = std::numeric_limits<float>::infinity();
 			for(int i =0; i<measured_objects.size(); i++) {
-				std::cout << "test";
 				if(measured_objects[i].propability >= init_propability_treshold 
 				&& measured_objects[i].distance < new_object.distance) {
 					new_object = measured_objects[i];
@@ -90,8 +102,13 @@ public:
 		} else {
 			float min_distance = std::numeric_limits<float>::infinity();
 			object best_guess;
+			object predicted_obj = known_objects[0];
+			predicted_obj.pos.x = predicted_obj.pos.x + predicted_obj.vel.x*passed_time;
+			predicted_obj.pos.y = predicted_obj.pos.y + predicted_obj.vel.y*passed_time;
+			predicted_obj.pos.z = predicted_obj.pos.z + predicted_obj.vel.z*passed_time;
+			
 			for(int i =0; i<=measured_objects.size(); i++) {
-				float object_distance = calculate_2_point_distance(measured_objects[i].pos, known_objects[0].pos);
+				float object_distance = calculate_2_point_distance(measured_objects[i].pos, predicted_obj.pos);
 				if(object_distance < min_distance) {
 					min_distance = object_distance;
 					best_guess = measured_objects[i];
@@ -99,8 +116,14 @@ public:
 			}
 			ROS_INFO("min_distance: %f",min_distance);
 			if(min_distance < scan_max_distance) {
+				geometry_msgs::Point32 vel;
+				vel.x = (best_guess.pos.x - known_objects[0].pos.x);
+				vel.y = (best_guess.pos.y - known_objects[0].pos.y);
+				vel.z = (best_guess.pos.z - known_objects[0].pos.z);
+				best_guess.vel = vel;
 				known_objects[0] = best_guess;
 				visualize_target(known_objects, msg);
+				visualize_pred_way(msg.header, best_guess.pos, best_guess.vel, passed_time);
 			}
 			
 		}
@@ -132,20 +155,57 @@ public:
 		
 		arrow.scale.x = 0.02; //shaft dia
 		arrow.scale.y = 0.03;	//head dia
-		arrow.scale.z = 0.05;		//head length
+		arrow.scale.z = 0.05;	//head length
 		
 		arrow.color.a = 1.0;
 		arrow.color.r = 1.0;
 		arrow.color.g = 1.0;
 		arrow.color.b = 1.0;
 		
-		marker_pub.publish(arrow);
-		//ROS_INFO("visualization published");
+		target_pub.publish(arrow);
+		//ROS_INFO("target visualization published");
 		
+
+	}
+	
+	void visualize_pred_way(std_msgs::Header header,geometry_msgs::Point32 pos, geometry_msgs::Point32 vel, float passed_time) {
+		visualization_msgs::Marker pred_way_arrow;
+		pred_way_arrow.header = header;
+		pred_way_arrow.ns = "pred_way";
+		pred_way_arrow.action = visualization_msgs::Marker::MODIFY;
+		pred_way_arrow.pose.orientation.w = 1.0;
+		pred_way_arrow.id = 0;
+		pred_way_arrow.type = visualization_msgs::Marker::ARROW;
+		
+		geometry_msgs::Point pred_way_arrow_start;
+		geometry_msgs::Point pred_way_arrow_end;
+		
+		pred_way_arrow_start.x = pos.x;
+		pred_way_arrow_start.y = pos.y;
+		pred_way_arrow_start.z = pos.z;
+		
+		pred_way_arrow_end.x = pos.x + vel.x*passed_time;
+		pred_way_arrow_end.y = pos.y + vel.y*passed_time;
+		pred_way_arrow_end.z = pos.z + vel.z*passed_time;
+		pred_way_arrow.points.push_back(pred_way_arrow_start);
+		pred_way_arrow.points.push_back(pred_way_arrow_end);
+		
+		
+		pred_way_arrow.scale.x = 0.02; //shaft dia
+		pred_way_arrow.scale.y = 0.03;	//head dia
+		pred_way_arrow.scale.z = 0.05;	//head length
+		
+		pred_way_arrow.color.a = 1.0;
+		pred_way_arrow.color.r = 1.0;
+		pred_way_arrow.color.g = 1.0;
+		pred_way_arrow.color.b = 1.0;
+		
+		pred_way_pub.publish(pred_way_arrow);
 	}
 	
 
 };
+
 
 int main(int argc, char **argv)
 {

@@ -51,6 +51,8 @@ ros/ros.h
 /home/pfeix/robot_host_ws/src/laser_segmentation/ros/ros.h
 sensor_msgs/PointCloud.h
 /home/pfeix/robot_host_ws/src/laser_segmentation/sensor_msgs/PointCloud.h
+std_msgs/Header.h
+/home/pfeix/robot_host_ws/src/laser_segmentation/std_msgs/Header.h
 laser_features/Featured_segments.h
 /home/pfeix/robot_host_ws/src/laser_segmentation/laser_features/Featured_segments.h
 laser_features/Segment_featured.h

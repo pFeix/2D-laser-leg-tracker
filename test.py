@@ -6,6 +6,7 @@ import os.path
 import sys
 from sklearn.externals import joblib
 from sklearn.metrics import confusion_matrix, precision_score, recall_score, accuracy_score, zero_one_loss
+from sklearn.metrics import classification_report
 
 path = os.path.expanduser('~/robot_host_ws/')
 
@@ -54,6 +55,9 @@ else:
 	
 print('predicted')
 
+report = classification_report(test_lables, last_test_pred.ravel(), target_names=['human','background'])
+print(report)
+
 accuracy = accuracy_score(test_lables, last_test_pred.ravel())
 precision = precision_score(test_lables, last_test_pred.ravel())
 recall = recall_score(test_lables, last_test_pred.ravel())
@@ -65,13 +69,14 @@ print('precision:',precision,' recall:',recall,' accuracy:',accuracy)
 
 
 
+
 #----------visulization--------
 def plot_confusion_matrix(cm, classes,
                           normalize=False,
                           title='Confusion matrix',
                           cmap=plt.cm.Blues):
     
-	plt.figure(2)
+	plt.figure(2,figsize=(10,10))
 	"""
 	This function prints and plots the confusion matrix.
 	Normalization can be applied by setting `normalize=True`.
@@ -102,11 +107,18 @@ def plot_confusion_matrix(cm, classes,
 	plt.xlabel('Predicted label')
 	classifier = '?'
 	#plt.text(-1.5,2.05,'Algorithm: '+clf_params['algorithm']+'\nn_estimators:'+str(len(clf.estimators_,))+'\ntree_depth:'+str(clf_params['base_estimator__max_depth']))
-	plt.text(-1.5,2.05,'precision:'+str(precision)+'\nrecall:'+str(recall)+'\naccuracy:'+str(accuracy))
+	#plt.text(-1.5,2.05,'precision:'+str(precision)+'\nrecall:'+str(recall)+'\naccuracy:'+str(accuracy))
+	plt.text(-3,3, report)
 	plt.tight_layout()
 	plt.savefig(os.path.join(path,'confusion_matrix.png'))
     
 #-----------------func end-------------
+
+def print_report():
+  plt.figure(4)
+  plt.text(0,0,report)
+  plt.tight_layout()
+  plt.savefig(os.path.join(path,'report.png'))
 
 def plot_error_graph():
 	ax = plt.figure(1).add_subplot(111)
@@ -167,6 +179,8 @@ if(has_staged):
 	
 if(hasattr(clf, 'feature_importances_')):
 	plot_importances()
+	
+print_report()
 	
 plot_confusion_matrix(cnf_matrix, classes=['human','background'], title='Confusion matrix, without normalization')
 
