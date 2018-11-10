@@ -74,8 +74,11 @@ public:
 		  							pow(msg->points[i].z-msg->points[i-1].z,2.0)
 								)
 							);
+				
 	
+				//if smaler threshold save in same segment
 				if(delta <= threshold) {
+					ROS_INFO("delta: %f x:%f y:%f z:%f", delta,msg->points[i].x,msg->points[i].y,msg->points[i].z);
 					segments_msg.segments[segment_counter].segment.push_back(msg->points[i]);
 
 					if (has_lables(msg)) {
@@ -89,8 +92,9 @@ public:
 					}else{
 						segments_msg.segments[segment_counter].class_id=-1;
 					}
-						
+				//if bigger threshold save in new segment	
 				}else{
+					ROS_INFO("new segment! delta: %f", delta);
 					//validate_segment(segments_msg.segments[segment_counter]);
 					segment_counter++;
 					lable_changed = false;
@@ -100,7 +104,7 @@ public:
 					else
 						segments_msg.segments[segment_counter].class_id=-1;
 			
-					//ROS_INFO("---------------------------------------- \n Segment: %i ", segment_counter);
+					ROS_INFO("---------------------------------------- \n Segment: %i ", segment_counter);
 				}
 	
 				//ROS_INFO("%i, Delta= %f ,Distance= %f, x= %f, y= %f, class_id= %d",i, delta, 
@@ -149,8 +153,10 @@ public:
 			
 			if(i%3 == 0)
 				color.g = 1.0;
-			else if(i%3 == 1)
-				color.b = 1.0;
+			else if(i%3 == 1) {
+				color.r = 1.0;
+				color.g = 1.0;
+			}
 			else if(i%3 == 2)
 				color.r = 1.0;
 			

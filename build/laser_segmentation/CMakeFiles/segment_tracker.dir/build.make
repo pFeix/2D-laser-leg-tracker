@@ -81,14 +81,40 @@ laser_segmentation/CMakeFiles/segment_tracker.dir/segmentTracking.cpp.o.provides
 laser_segmentation/CMakeFiles/segment_tracker.dir/segmentTracking.cpp.o.provides.build: laser_segmentation/CMakeFiles/segment_tracker.dir/segmentTracking.cpp.o
 
 
+laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o: laser_segmentation/CMakeFiles/segment_tracker.dir/flags.make
+laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o: /home/pfeix/robot_host_ws/src/laser_segmentation/hungarian-algorithm/Hungarian.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pfeix/robot_host_ws/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o"
+	cd /home/pfeix/robot_host_ws/build/laser_segmentation && /usr/bin/c++   $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -o CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o -c /home/pfeix/robot_host_ws/src/laser_segmentation/hungarian-algorithm/Hungarian.cpp
+
+laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.i"
+	cd /home/pfeix/robot_host_ws/build/laser_segmentation && /usr/bin/c++  $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pfeix/robot_host_ws/src/laser_segmentation/hungarian-algorithm/Hungarian.cpp > CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.i
+
+laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.s"
+	cd /home/pfeix/robot_host_ws/build/laser_segmentation && /usr/bin/c++  $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pfeix/robot_host_ws/src/laser_segmentation/hungarian-algorithm/Hungarian.cpp -o CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.s
+
+laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o.requires:
+
+.PHONY : laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o.requires
+
+laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o.provides: laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o.requires
+	$(MAKE) -f laser_segmentation/CMakeFiles/segment_tracker.dir/build.make laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o.provides.build
+.PHONY : laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o.provides
+
+laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o.provides.build: laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o
+
+
 # Object files for target segment_tracker
 segment_tracker_OBJECTS = \
-"CMakeFiles/segment_tracker.dir/segmentTracking.cpp.o"
+"CMakeFiles/segment_tracker.dir/segmentTracking.cpp.o" \
+"CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o"
 
 # External object files for target segment_tracker
 segment_tracker_EXTERNAL_OBJECTS =
 
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/segment_tracker: laser_segmentation/CMakeFiles/segment_tracker.dir/segmentTracking.cpp.o
+/home/pfeix/robot_host_ws/devel/lib/laser_segmentation/segment_tracker: laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/segment_tracker: laser_segmentation/CMakeFiles/segment_tracker.dir/build.make
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/segment_tracker: /opt/ros/kinetic/lib/libtf.so
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/segment_tracker: /opt/ros/kinetic/lib/libtf2_ros.so
@@ -115,7 +141,7 @@ segment_tracker_EXTERNAL_OBJECTS =
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/segment_tracker: /usr/lib/x86_64-linux-gnu/libpthread.so
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/segment_tracker: /usr/lib/x86_64-linux-gnu/libconsole_bridge.so
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/segment_tracker: laser_segmentation/CMakeFiles/segment_tracker.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/pfeix/robot_host_ws/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/segment_tracker"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/pfeix/robot_host_ws/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Linking CXX executable /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/segment_tracker"
 	cd /home/pfeix/robot_host_ws/build/laser_segmentation && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/segment_tracker.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.
@@ -124,6 +150,7 @@ laser_segmentation/CMakeFiles/segment_tracker.dir/build: /home/pfeix/robot_host_
 .PHONY : laser_segmentation/CMakeFiles/segment_tracker.dir/build
 
 laser_segmentation/CMakeFiles/segment_tracker.dir/requires: laser_segmentation/CMakeFiles/segment_tracker.dir/segmentTracking.cpp.o.requires
+laser_segmentation/CMakeFiles/segment_tracker.dir/requires: laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o.requires
 
 .PHONY : laser_segmentation/CMakeFiles/segment_tracker.dir/requires
 

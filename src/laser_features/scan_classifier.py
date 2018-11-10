@@ -23,7 +23,7 @@ def callback(data):
 
 	scan_start_time = time.clock()
 	#msg = Featured_segments()
-	for i in data.segments:
+	for index, i in enumerate(data.segments):
 		start_time = time.clock()
 		features = ({						'distance_to_origin':i.distance,
 														'number_of_points':i.number_of_points, 
@@ -191,7 +191,7 @@ def class_visualization(data):
 			class_text.color.r = 1.0
 			class_text.color.g = 1.0
 			class_text.color.b = 1.0
-			class_text.text = str(item.class_id)
+			class_text.text = str(round(item.class_id,2))
 			class_text.pose.position.x = (item.center.x)
 			class_text.pose.position.y = (item.center.y)
 			class_text.pose.position.z = (item.center.z)

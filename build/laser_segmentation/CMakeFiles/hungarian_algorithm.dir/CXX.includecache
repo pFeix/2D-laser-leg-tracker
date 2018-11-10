@@ -1,0 +1,24 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/pfeix/robot_host_ws/src/laser_segmentation/hungarian-algorithm/Hungarian.cpp
+stdlib.h
+-
+cfloat
+-
+cmath
+-
+Hungarian.h
+/home/pfeix/robot_host_ws/src/laser_segmentation/hungarian-algorithm/Hungarian.h
+
+/home/pfeix/robot_host_ws/src/laser_segmentation/hungarian-algorithm/Hungarian.h
+iostream
+-
+vector
+-
+

@@ -211,7 +211,7 @@ include_directories(
 
 add_executable(laser_segmentator laserpointSegmentation.cpp)
 add_executable(trainingdata_publisher trainingdataPublisher.cpp)
-add_executable(segment_tracker segmentTracking.cpp)
+add_executable(segment_tracker segmentTracking.cpp hungarian-algorithm/Hungarian.cpp)
 target_link_libraries(laser_segmentator ${catkin_LIBRARIES})
 target_link_libraries(trainingdata_publisher ${catkin_LIBRARIES})
 target_link_libraries(segment_tracker ${catkin_LIBRARIES})

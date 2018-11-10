@@ -405,6 +405,33 @@ laser_segmentator/fast:
 	cd /home/pfeix/robot_host_ws/build && $(MAKE) -f laser_segmentation/CMakeFiles/laser_segmentator.dir/build.make laser_segmentation/CMakeFiles/laser_segmentator.dir/build
 .PHONY : laser_segmentator/fast
 
+hungarian-algorithm/Hungarian.o: hungarian-algorithm/Hungarian.cpp.o
+
+.PHONY : hungarian-algorithm/Hungarian.o
+
+# target to build an object file
+hungarian-algorithm/Hungarian.cpp.o:
+	cd /home/pfeix/robot_host_ws/build && $(MAKE) -f laser_segmentation/CMakeFiles/segment_tracker.dir/build.make laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.o
+.PHONY : hungarian-algorithm/Hungarian.cpp.o
+
+hungarian-algorithm/Hungarian.i: hungarian-algorithm/Hungarian.cpp.i
+
+.PHONY : hungarian-algorithm/Hungarian.i
+
+# target to preprocess a source file
+hungarian-algorithm/Hungarian.cpp.i:
+	cd /home/pfeix/robot_host_ws/build && $(MAKE) -f laser_segmentation/CMakeFiles/segment_tracker.dir/build.make laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.i
+.PHONY : hungarian-algorithm/Hungarian.cpp.i
+
+hungarian-algorithm/Hungarian.s: hungarian-algorithm/Hungarian.cpp.s
+
+.PHONY : hungarian-algorithm/Hungarian.s
+
+# target to generate assembly for a file
+hungarian-algorithm/Hungarian.cpp.s:
+	cd /home/pfeix/robot_host_ws/build && $(MAKE) -f laser_segmentation/CMakeFiles/segment_tracker.dir/build.make laser_segmentation/CMakeFiles/segment_tracker.dir/hungarian-algorithm/Hungarian.cpp.s
+.PHONY : hungarian-algorithm/Hungarian.cpp.s
+
 laserpointSegmentation.o: laserpointSegmentation.cpp.o
 
 .PHONY : laserpointSegmentation.o
@@ -515,6 +542,9 @@ help:
 	@echo "... laser_segmentator"
 	@echo "... test"
 	@echo "... rebuild_cache"
+	@echo "... hungarian-algorithm/Hungarian.o"
+	@echo "... hungarian-algorithm/Hungarian.i"
+	@echo "... hungarian-algorithm/Hungarian.s"
 	@echo "... laserpointSegmentation.o"
 	@echo "... laserpointSegmentation.i"
 	@echo "... laserpointSegmentation.s"
