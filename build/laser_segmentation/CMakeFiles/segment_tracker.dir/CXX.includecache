@@ -79,7 +79,17 @@ visualization_msgs/Marker.h
 -
 visualization_msgs/MarkerArray.h
 -
-queue
+chrono
+-
+stdio.h
+-
+sys/select.h
+-
+termios.h
+-
+stropts.h
+-
+sys/ioctl.h
 -
 
 /opt/ros/kinetic/include/geometry_msgs/Point.h

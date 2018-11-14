@@ -6,19 +6,36 @@
 #include "hungarian-algorithm/Hungarian.h"
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <queue>
+#include <chrono>
+
+
+//for keyboard input
+#include <stdio.h>
+#include <sys/select.h>
+#include <termios.h>
+#include <stropts.h>
+#include <sys/ioctl.h>
 
 /*
 TO DO:
--add max_cost_treshhold for assignment -> if creater recaclulate assignment/use next best solution/!!set cost to infity!! (exp func)
--improve cost_function
--gating ?
--if target_number < 2 get nearestN of target and if > treshhold also target
--prevent target from get lost ? e.g. target gets not assignt because other object has only a bit lower cost -> pririze target ? or improve scoring/segmenting
--reinitilize via key -> segment tracking from beginning -> select target on init
+-to prevent assignment at any cost -> include meassure not available with high cost(not to high/calclulate cost for specific values) -> handle as if not assigned //study source again
 
+-add max_cost_treshhold for assignment -> if greater recaclulate assignment/use next best solution/set cost to infity/UPPER ONE
+
+ 
+--------------------------------do after rest/segmentation-----------------------------------
+-if target_number < 2 get nearestN of target and if > treshhold also target (increases target not getting lost)
+
+-prevent target from get lost(segment error) ? e.g. target gets not assignt because other object has only a bit lower cost -> priotize target (bad idea? because target gets assigned even if not true) ? or just improve scoring/segmenting
+
+-------------------------------do afterclassification improvement----------------------------------------------------------
 -save propability over time and take middle
+-improve cost_function -> appearance ? propability(better classifier needed)
 
+--------------------------------do after rest-------------------------------------------------------------------
+-gating erst treshhold distance spaeter kalman predict
+-limit velocity to reasonable value/ calculate better
+-link no match cost to velocity and time not to distance
 
 */
 class SegmentTracking
@@ -33,9 +50,6 @@ private:
 	
 	HungarianAlgorithm HungAlgo;
 	
-	const static int max_queue_length = 5; 
-	std::queue<laser_features::Featured_segments> segment_queue;
-	
 	struct object {
 		int id;
 		geometry_msgs::Point32 pos;
@@ -49,10 +63,13 @@ private:
 	std::vector<object> known_objects;
 	
 	float init_propability_treshold = 0.7;
+	float association_velocity_treshhold = 1.4; //in m/s
 	
 	float init_max_distance = 1.5;
 	float scan_max_distance = 1.0;
 	float delete_treshold = 3.0;
+		
+	float no_match_cost; 
 	
 	ros::Time last_time = ros::Time(0);
 	
@@ -73,11 +90,18 @@ public:
 		id_text_pub = n.advertise<visualization_msgs::MarkerArray>("/id_text_markers", 1, true);
 		
 		sub = n.subscribe("/classified_segments", 10, &SegmentTracking::pointCloudCallback, this);
+		
+		
+		object cost_calc_obj_1;
+		object cost_calc_obj_2;
+		cost_calc_obj_1.pos.x = 1;
+		no_match_cost = calculate_cost(cost_calc_obj_1, cost_calc_obj_2);
 	}
 	
-	   
+
 	void pointCloudCallback(const laser_features::Featured_segments &msg)
 	{
+		auto time_1 = std::chrono::high_resolution_clock::now();
 		double passed_time = (msg.header.stamp-last_time).toSec();
 		if(last_time == ros::Time(0) || passed_time <= 0.0 || passed_time > 5.0)
 			passed_time = 0.0;
@@ -85,12 +109,124 @@ public:
 		ROS_INFO("passed_time:%lf",passed_time);
 		
 		
+		//---------------safe measured objects ---------------------------------
+		std::vector<object> measured_objects = meassure_objects(msg);
+		if(measured_objects.empty())
+			return;
+			
+			
+		// init() save all initial mesaurements into array
+		if(known_objects.empty()) {
+			id_count = 1;
+			for(int i =0; i<measured_objects.size(); i++) {
+				object new_object = measured_objects[i];
+				new_object.id = id_count;
+				id_count++;				
+				known_objects.push_back(new_object);
+				mark_target(known_objects);
+			}
+		//update objects	
+		} else {
+			//ROS_INFO("n_objects: %i n_meassured: %i",known_objects.size(),measured_objects.size());
+			
+			object predicted_objects[known_objects.size()]; //kown object predictet by last knewn state
+			vector <object> new_objects; 										//new objects states
+			
+			//predict next objects position
+			for(int i = 0; i < known_objects.size(); i++) {
+				predicted_objects[i] = predict_object(known_objects[i],passed_time);
+			}
 		
-		//segment_queue.push(msg);
-		//while(segment_queue.size() > max_queue_length)
-		//	segment_queue.pop();
-		//----------------------------------------------------------------------------------------------
-		//---------------safe measured objects above threshold---------------------------------
+			//calculate all costs
+			vector< vector<double> > costMatrix(known_objects.size());
+			ROS_INFO("Cost Matrix: \n");
+			for(int i = 0; i < known_objects.size(); i++) {
+				for(int j = 0; j < measured_objects.size(); j++) {
+					float cost = calculate_cost(predicted_objects[i],measured_objects[j]);
+					if(cost <= no_match_cost)
+						costMatrix[i].push_back(cost);
+					else
+						costMatrix[i].push_back(std::numeric_limits<float>::max());
+					std::cout << costMatrix[i][j] << ",";
+				}
+				std::cout << "\n";
+			}
+			
+			//find objects without reasonable cost and stall them
+			stall_unassignable_objects(known_objects, costMatrix, new_objects,passed_time);
+			
+			
+			//find best assignment
+			vector<int> assignment;
+			double cost = HungAlgo.Solve(costMatrix, assignment);
+			
+			for(int i = 0; i<assignment.size(); i++) {
+				//assign best guess to known objects
+				if(assignment[i] >= 0) {
+					object new_object = measured_objects[assignment[i]];
+					measured_objects[assignment[i]].assigned = true;
+					
+					new_object.id = known_objects[i].id;
+					new_object.is_target = known_objects[i].is_target;
+					new_object.vel = update_velocity(known_objects[i].pos, new_object.pos);
+					new_objects.push_back(new_object);
+				}
+				else {
+					stall_object(new_objects,known_objects[i],passed_time);			
+				}
+			}
+		
+			//if no suitable object for meassurements are found create new objects
+			for(int i = 0; i<measured_objects.size(); i++) {
+				if(measured_objects[i].assigned == false) {
+					measured_objects[i].assigned = true;
+					measured_objects[i].id = id_count;
+					id_count++;
+					new_objects.push_back(measured_objects[i]);
+				}
+			}
+					
+			known_objects = new_objects;			
+			if(!has_target)
+				mark_target(known_objects);
+				
+			visualize_target(known_objects, msg.header);
+			visualize_ids(known_objects,msg.header);
+		}
+		auto time_2 = std::chrono::high_resolution_clock::now();
+		//float execution_time = std::chrono::duration_cast<std::chrono::microseconds>(time_2 - time_1).count();
+		//ROS_INFO("Execution time: %f",execution_time);//float e_t = execution_time.count();
+		ROS_INFO("no_match_cost: %f",no_match_cost);
+	}
+	
+	
+	
+	
+	
+	
+////-----------------------------HELPER-FUNCTIONS-------------------------------------------------------
+
+	void stall_unassignable_objects(std::vector<object>& known_objects, vector< vector<double> >& costMatrix, vector <object>& new_objects,const float passed_time)
+	{
+		for(int i = 0; i < costMatrix.size(); i++) {
+			bool has_match = false;
+			for(int j = 0; j < costMatrix[i].size(); j++) {
+				if(costMatrix[i][j] <= no_match_cost) {
+					has_match = true;
+					break;
+				}					
+			}
+			if(!has_match) {
+				costMatrix.erase(costMatrix.begin()+i);
+				stall_object(new_objects,known_objects[i],passed_time);
+				known_objects.erase(known_objects.begin()+i);
+				i--;
+			}
+		}
+	}
+
+	std::vector<object> meassure_objects(const laser_features::Featured_segments &msg)
+	{
 		std::vector<object> measured_objects;
 		for(auto &segment: msg.segments) {
 			//ROS_INFO("%f",segment.class_id);
@@ -102,175 +238,74 @@ public:
 			new_measurement.propability = segment.class_id;
 			new_measurement.distance = segment.distance;
 			measured_objects.push_back(new_measurement);
-			//ROS_INFO("prop: %f, tresh: %f",new_measurement.propability,init_propability_treshold);
-			
-			
 		}
-		//ROS_INFO("measured objects: %lu", measured_objects.size());
-		if(measured_objects.empty())
-			return;
-			
-			
-		// if no target known save all initial mesaurements into array
-		if(!has_target) {
-			known_objects.clear();
-			object dummy_object;
-			dummy_object.distance = std::numeric_limits<float>::infinity();
-			object * best_object = &dummy_object;
-			id_count = 1;
-		
-			for(int i =0; i<measured_objects.size(); i++) {
-				object new_object = measured_objects[i];
-				new_object.id = id_count;
-				id_count++;				
-				known_objects.push_back(new_object);
-				//ROS_INFO("prop: %f, tresh: %f",known_objects[i].propability,init_propability_treshold);
-				if(known_objects.back().propability >= init_propability_treshold && known_objects[i].distance < best_object->distance) {
-					best_object = &known_objects[i]; //falsch ?
-				}
-			}
-			ROS_INFO("Searching for target... best object distance: %f propability: %f",best_object->distance,best_object->propability);
-			if(best_object->distance < init_max_distance) {
-				best_object->is_target = true;
-				has_target = true;
-				ROS_INFO("first target found!");
-			}
-			
-		// if target nown update positions	
-		} else {
-			int n_objects = known_objects.size();
-			int n_meassured = measured_objects.size();
-			
-			object predicted_objects[n_objects];
-			
-			//predict next objects position
-			for(int i = 0; i < n_objects; i++) {
-				predicted_objects[i] = predict_object(known_objects[i],passed_time);
-				//std::cout << predicted_objects[i].pos.y;
-			}
-		
-			//calculate all costs
-			//									h							w
-			//float costMatrix[n_objects][n_meassured];
-			vector< vector<double> > costMatrix(n_objects);
-			//ROS_INFO("Cost Matrix: \n");
-			for(int i = 0; i < n_objects; i++) {
-				for(int j = 0; j < n_meassured; j++) {
-					costMatrix[i].push_back(calculate_cost(predicted_objects[i],measured_objects[j]));
-					//std::cout << costMatrix[i][j] << ",";
-				}
-				//std::cout << "\n";
-			}
-			
-			
-			
-			//find best guess
-			vector<int> assignment;
-			double cost = HungAlgo.Solve(costMatrix, assignment);
-			vector<int> marked_for_delete;
-			
-			//ROS_INFO("n_objects: %i n_meassured: %i",n_objects,n_meassured);
-			
-			
-			vector <object> new_objects;
-			for(int i = 0; i<assignment.size(); i++) {
-				//assign best guess to known objects
-				if(assignment[i] >= 0) {
-					object new_object = measured_objects[assignment[i]];
-					measured_objects[assignment[i]].assigned = true;
-					
-					
-					new_object.id = known_objects[i].id;
-					new_object.is_target = known_objects[i].is_target;
-					new_object.vel.x = (new_object.pos.x - known_objects[i].pos.x);
-					new_object.vel.y = (new_object.pos.y - known_objects[i].pos.y);
-					new_object.vel.z = (new_object.pos.z - known_objects[i].pos.z);
-		
-					new_objects.push_back(new_object);
-				}
-				//calculate last seen time and save if below time treshhold
-				else {
-					object new_object = known_objects[i];
-					new_object.last_seen += passed_time;
-					new_object.pos.x = new_object.pos.x + new_object.vel.x;
-					new_object.pos.y = new_object.pos.y + new_object.vel.y;
-					new_object.pos.z = new_object.pos.z + new_object.vel.z;
-					if(new_object.last_seen < delete_treshold) {
-						new_objects.push_back(new_object);
-					}
-					
-				}
-			}
-			
-			
-			
-			//if no suitable meassurements are found create new objects
-			for(int i = 0; i<n_meassured; i++) {
-				if(measured_objects[i].assigned == false) {
-					measured_objects[i].assigned = true;
-					measured_objects[i].id = id_count;
-					id_count++;
-					new_objects.push_back(measured_objects[i]);
-				}
-			}
-			
-			
-			known_objects = new_objects;
-						
+		return measured_objects;
+	}
 
-			visualize_target(known_objects, msg.header);
-			visualize_ids(known_objects,msg.header);
-		
-		
-		/*
-			//--------------------------------single target tracking---------------------------------------------------------------------
-			//predict next object position
-			object predicted_obj = predict_object(known_objects[0],passed_time);
-			
-			
-			//calculate all costs and find best guess
-			object best_guess;
-			float min_cost = std::numeric_limits<float>::infinity();
-			for(int i =0; i<=measured_objects.size(); i++) {
-				float cost = calculate_cost(measured_objects[i], predicted_obj);
-				if(cost < min_cost) {
-					min_cost = cost;
-					best_guess = measured_objects[i];
-				}
-			}
-			//calculate velocity for next update from last known and current position + visualize pos
-			//ROS_INFO("min_cost: %f",min_cost);
-			if(min_cost < scan_max_distance) {
-				geometry_msgs::Point32 vel;
-				vel.x = (best_guess.pos.x - known_objects[0].pos.x);
-				vel.y = (best_guess.pos.y - known_objects[0].pos.y);
-				vel.z = (best_guess.pos.z - known_objects[0].pos.z);
-				best_guess.vel = vel;
-				known_objects[0] = best_guess;
-				visualize_target(known_objects, msg);
-				visualize_pred_way(msg.header, best_guess.pos, best_guess.vel, passed_time);
-			}
-			*/
+	//calculate last seen time and save if below time treshhold else let fall
+	void stall_object(std::vector<object>& new_objects, object old_object, const float passed_time) 
+	{
+		object new_object = old_object;
+		new_object.last_seen += passed_time;
+		if(new_object.last_seen < delete_treshold) {
+			new_object.pos = predict_position(new_object.pos,new_object.vel,passed_time);
+			//new_object.vel.x = 0;//new_object.vel.x;
+			//new_object.vel.y = 0;//new_object.vel.y;
+			//new_object.vel.z = 0;//new_object.vel.z;
+			new_objects.push_back(new_object);
 		}
 	}
 	
+	geometry_msgs::Point32 predict_position(geometry_msgs::Point32 pos, const geometry_msgs::Point32 vel, const float passed_time) 
+	{
+		pos.x = pos.x; + vel.x*passed_time;
+		pos.y = pos.y; + vel.y*passed_time;
+		pos.z = pos.z; + vel.z*passed_time;
+		return pos;
+	}
 	
+	geometry_msgs::Point32 update_velocity(geometry_msgs::Point32 old_pos, geometry_msgs::Point32 new_pos)
+	{
+		geometry_msgs::Point32 vel;
+		vel.x = (new_pos.x - old_pos.x);
+		vel.y = (new_pos.y - old_pos.y);
+		vel.z = (new_pos.z - old_pos.z);
+		return vel;		
+	}
+
+	void mark_target(std::vector<object>& known_objects) {
+		object dummy_object;
+		dummy_object.distance = std::numeric_limits<float>::infinity();
+		object * best_object = &dummy_object;
+		
+		for(int i =0; i<known_objects.size(); i++) {
+			if(known_objects[i].propability >= init_propability_treshold && known_objects[i].distance < best_object->distance) 
+			{
+				best_object = &known_objects[i];
+			}					
+		}
+		ROS_INFO("Searching for target... best object distance: %f propability: %f",best_object->distance,best_object->propability);
+		
+		if(best_object->distance < init_max_distance) {
+			best_object->is_target = true;
+			has_target = true;
+			ROS_INFO("first target found!");
+		}
+	}
 	
-	
-	
-	
-////-----------------------------HELPER-FUNCTIONS-------------------------------------------------------
+	void reset_target() {
+		ROS_INFO("reseting target!");
+		for(int i =0; i<known_objects.size(); i++) {
+			known_objects[i].is_target = false;
+		}
+		has_target = false;
+	}
+
 	object predict_object(object known_object, float passed_time) {
 			object predicted_obj = known_object;
-			predicted_obj.pos.x = predicted_obj.pos.x + predicted_obj.vel.x*passed_time;
-			predicted_obj.pos.y = predicted_obj.pos.y + predicted_obj.vel.y*passed_time;
-			predicted_obj.pos.z = predicted_obj.pos.z + predicted_obj.vel.z*passed_time;
+			predicted_obj.pos = predict_position(predicted_obj.pos, predicted_obj.vel, passed_time);
 			return predicted_obj;
 	}
-	
-//	float calculate_matching_score(object A, object B){
-//	
-//	}
 	
 	float calculate_cost(object A, object B){
 		float object_distance = calculate_2_point_distance(A.pos, B.pos);
@@ -281,11 +316,7 @@ public:
 	float calculate_2_point_distance(geometry_msgs::Point32 A,geometry_msgs::Point32 B) {
 		return sqrt(pow(A.x-B.x,2)+pow(A.y-B.y,2)+pow(A.z-B.z,2));
 	}
-	
-	
-	
-	
-	
+		
 	
 ////-----------------------------------------------VISUALIZATION!!!------------------------------------------------------------------------------------------------------------------------------
 	void visualize_ids(const std::vector<object> known_objects, const std_msgs::Header header) {
@@ -359,8 +390,6 @@ public:
 		
 		target_pub.publish(arrow);
 		//ROS_INFO("target visualization published");
-		
-
 	}
 	
 	void visualize_pred_way(std_msgs::Header header,geometry_msgs::Point32 pos, geometry_msgs::Point32 vel, float passed_time) {
@@ -397,9 +426,27 @@ public:
 		
 		pred_way_pub.publish(pred_way_arrow);
 	}
-	
-
 };
+
+
+int _kbhit() {
+    static const int STDIN = 0;
+    static bool initialized = false;
+
+    if (! initialized) {
+        // Use termios to turn off line buffering
+        termios term;
+        tcgetattr(STDIN, &term);
+        term.c_lflag &= ~ICANON;
+        tcsetattr(STDIN, TCSANOW, &term);
+        setbuf(stdin, NULL);
+        initialized = true;
+    }
+
+    int bytesWaiting;
+    ioctl(STDIN, FIONREAD, &bytesWaiting);
+    return bytesWaiting;
+}
 
 
 int main(int argc, char **argv)
@@ -407,10 +454,18 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "segmentTracker");
 
 	//ROS_INFO("ARG: %s", argv[1]);
-	
+		
   SegmentTracking STObject;
-   
-  ros::spin();
+
+  while (ros::ok())
+	{		
+		if(_kbhit()) {
+			int c = getchar();
+  		if (c == 'r')
+  			STObject.reset_target();
+  	}
+		ros::spinOnce();
+	}
 
   return 0;
 }

@@ -34,6 +34,10 @@ public:
   	segments_pub = n.advertise<laser_segmentation::PointCloudSegmented>("/pointcloud_segments",100000, true);
 		marker_pub = n.advertise<visualization_msgs::Marker>("/visualization_marker", 100000, true);
 	}
+	
+//*****************************************************************************************************************************************//
+//                         																SEGMENTATION                                                                     //
+//*****************************************************************************************************************************************//
 	   
 	void pointCloudCallback(const sensor_msgs::PointCloud::ConstPtr& msg)
 	{
@@ -41,7 +45,6 @@ public:
 		//ROS_INFO("PointCloud: n:[%lu] ", boost::size(msg->points));
 	  	 
 	  	laser_segmentation::PointCloudSegmented segments_msg;
-	  
 	  	segments_msg.header = msg->header;
 	  	segments_msg.segments.resize(boost::size(msg->points)); //reserve sufficient space for segments
 
@@ -67,16 +70,10 @@ public:
 		}
 		  bool lable_changed = false;
   		for(int i=1; i < boost::size(msg->points); i++) { 		
-		  	float delta = 	fabs(
-		  						sqrt(
-		  							pow(msg->points[i].x-msg->points[i-1].x,2.0) +
-		  							pow(msg->points[i].y-msg->points[i-1].y,2.0) +
-		  							pow(msg->points[i].z-msg->points[i-1].z,2.0)
-								)
-							);
+				float delta = calculate_2_point_distance(msg->points[i],msg->points[i-1]);
 				
 	
-				//if smaler threshold save in same segment
+				//if smaler then threshold save in same segment
 				if(delta <= threshold) {
 					ROS_INFO("delta: %f x:%f y:%f z:%f", delta,msg->points[i].x,msg->points[i].y,msg->points[i].z);
 					segments_msg.segments[segment_counter].segment.push_back(msg->points[i]);
@@ -92,10 +89,9 @@ public:
 					}else{
 						segments_msg.segments[segment_counter].class_id=-1;
 					}
-				//if bigger threshold save in new segment	
+				//if bigger then threshold save in new segment	
 				}else{
 					ROS_INFO("new segment! delta: %f", delta);
-					//validate_segment(segments_msg.segments[segment_counter]);
 					segment_counter++;
 					lable_changed = false;
 					segments_msg.segments[segment_counter].segment.push_back(msg->points[i]);
@@ -124,6 +120,15 @@ public:
 		
 	}
 	
+//*****************************************************************************************************************************************//
+//                         																HELPER FUNCTIONS                                                                 //
+//*****************************************************************************************************************************************//
+	
+	float calculate_2_point_distance(geometry_msgs::Point32 A,geometry_msgs::Point32 B) {
+		return sqrt(pow(A.x-B.x,2)+pow(A.y-B.y,2)+pow(A.z-B.z,2));
+	}
+	
+	
 	bool has_lables(const sensor_msgs::PointCloud::ConstPtr& msg) {
 		if (boost::size(msg->channels)>0 && msg->channels[0].name == "class_label") {
 			return true;
@@ -132,8 +137,13 @@ public:
 		}
 		return false;
 	}
+
+
+//*****************************************************************************************************************************************//
+//                         																VISUALIZATION                                                                    //
+//*****************************************************************************************************************************************//
 		
-	void visualize_segments(laser_segmentation::PointCloudSegmented segments_msg) {			//display issues in rviz segments are correct but sometimes the color of the last segment changes im the middle
+	void visualize_segments(laser_segmentation::PointCloudSegmented segments_msg) {
 
 		visualization_msgs::Marker line_list;
 		line_list.header = segments_msg.header;
@@ -185,6 +195,10 @@ public:
 	}
 
 };
+
+//*****************************************************************************************************************************************//
+//                         																MAIN                                                                    				 //
+//*****************************************************************************************************************************************//
 
 int main(int argc, char **argv)
 {
