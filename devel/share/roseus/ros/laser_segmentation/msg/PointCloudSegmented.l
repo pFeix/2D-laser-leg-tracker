@@ -78,7 +78,7 @@
    self)
   )
 
-(setf (get laser_segmentation::PointCloudSegmented :md5sum-) "01f27048a4424acfc2e3c1dd6636c9d4")
+(setf (get laser_segmentation::PointCloudSegmented :md5sum-) "1fdd18917c0600141633e5caf4a303e6")
 (setf (get laser_segmentation::PointCloudSegmented :datatype-) "laser_segmentation/PointCloudSegmented")
 (setf (get laser_segmentation::PointCloudSegmented :definition-)
       "Header header
@@ -104,7 +104,7 @@ string frame_id
 
 ================================================================================
 MSG: laser_segmentation/Segment
-geometry_msgs/Point32[] segment
+geometry_msgs/Point32[] points
 int32 class_id
 
 ================================================================================
@@ -124,6 +124,6 @@ float32 z
 
 
 
-(provide :laser_segmentation/PointCloudSegmented "01f27048a4424acfc2e3c1dd6636c9d4")
+(provide :laser_segmentation/PointCloudSegmented "1fdd18917c0600141633e5caf4a303e6")
 
 

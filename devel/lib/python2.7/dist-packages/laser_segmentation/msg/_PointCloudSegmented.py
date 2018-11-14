@@ -10,7 +10,7 @@ import laser_segmentation.msg
 import std_msgs.msg
 
 class PointCloudSegmented(genpy.Message):
-  _md5sum = "01f27048a4424acfc2e3c1dd6636c9d4"
+  _md5sum = "1fdd18917c0600141633e5caf4a303e6"
   _type = "laser_segmentation/PointCloudSegmented"
   _has_header = True #flag to mark the presence of a Header object
   _full_text = """Header header
@@ -36,7 +36,7 @@ string frame_id
 
 ================================================================================
 MSG: laser_segmentation/Segment
-geometry_msgs/Point32[] segment
+geometry_msgs/Point32[] points
 int32 class_id
 
 ================================================================================
@@ -103,9 +103,9 @@ float32 z"""
       length = len(self.segments)
       buff.write(_struct_I.pack(length))
       for val1 in self.segments:
-        length = len(val1.segment)
+        length = len(val1.points)
         buff.write(_struct_I.pack(length))
-        for val2 in val1.segment:
+        for val2 in val1.points:
           _x = val2
           buff.write(_get_struct_3f().pack(_x.x, _x.y, _x.z))
         buff.write(_get_struct_i().pack(val1.class_id))
@@ -145,14 +145,14 @@ float32 z"""
         start = end
         end += 4
         (length,) = _struct_I.unpack(str[start:end])
-        val1.segment = []
+        val1.points = []
         for i in range(0, length):
           val2 = geometry_msgs.msg.Point32()
           _x = val2
           start = end
           end += 12
           (_x.x, _x.y, _x.z,) = _get_struct_3f().unpack(str[start:end])
-          val1.segment.append(val2)
+          val1.points.append(val2)
         start = end
         end += 4
         (val1.class_id,) = _get_struct_i().unpack(str[start:end])
@@ -180,9 +180,9 @@ float32 z"""
       length = len(self.segments)
       buff.write(_struct_I.pack(length))
       for val1 in self.segments:
-        length = len(val1.segment)
+        length = len(val1.points)
         buff.write(_struct_I.pack(length))
-        for val2 in val1.segment:
+        for val2 in val1.points:
           _x = val2
           buff.write(_get_struct_3f().pack(_x.x, _x.y, _x.z))
         buff.write(_get_struct_i().pack(val1.class_id))
@@ -223,14 +223,14 @@ float32 z"""
         start = end
         end += 4
         (length,) = _struct_I.unpack(str[start:end])
-        val1.segment = []
+        val1.points = []
         for i in range(0, length):
           val2 = geometry_msgs.msg.Point32()
           _x = val2
           start = end
           end += 12
           (_x.x, _x.y, _x.z,) = _get_struct_3f().unpack(str[start:end])
-          val1.segment.append(val2)
+          val1.points.append(val2)
         start = end
         end += 4
         (val1.class_id,) = _get_struct_i().unpack(str[start:end])

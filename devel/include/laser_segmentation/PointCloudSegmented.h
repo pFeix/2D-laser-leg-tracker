@@ -121,12 +121,12 @@ struct MD5Sum< ::laser_segmentation::PointCloudSegmented_<ContainerAllocator> >
 {
   static const char* value()
   {
-    return "01f27048a4424acfc2e3c1dd6636c9d4";
+    return "1fdd18917c0600141633e5caf4a303e6";
   }
 
   static const char* value(const ::laser_segmentation::PointCloudSegmented_<ContainerAllocator>&) { return value(); }
-  static const uint64_t static_value1 = 0x01f27048a4424acfULL;
-  static const uint64_t static_value2 = 0xc2e3c1dd6636c9d4ULL;
+  static const uint64_t static_value1 = 0x1fdd18917c060014ULL;
+  static const uint64_t static_value2 = 0x1633e5caf4a303e6ULL;
 };
 
 template<class ContainerAllocator>
@@ -168,7 +168,7 @@ string frame_id\n\
 \n\
 ================================================================================\n\
 MSG: laser_segmentation/Segment\n\
-geometry_msgs/Point32[] segment\n\
+geometry_msgs/Point32[] points\n\
 int32 class_id\n\
 \n\
 ================================================================================\n\

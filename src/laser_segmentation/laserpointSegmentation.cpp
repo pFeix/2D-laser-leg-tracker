@@ -18,6 +18,8 @@ private:
 	int segment_error_count = 0;
 	float threshold = 0.05;
 	int changed_lables_count = 0;
+	
+	laser_segmentation::Segment new_segment;
 
 public:
 
@@ -41,81 +43,68 @@ public:
 	   
 	void pointCloudCallback(const sensor_msgs::PointCloud::ConstPtr& msg)
 	{
-
-		//ROS_INFO("PointCloud: n:[%lu] ", boost::size(msg->points));
-	  	 
-	  	laser_segmentation::PointCloudSegmented segments_msg;
-	  	segments_msg.header = msg->header;
-	  	segments_msg.segments.resize(boost::size(msg->points)); //reserve sufficient space for segments
-
-  		int segment_counter = 0;
-	  	
-	  
-	  	//ROS_INFO("Threshold: %f" , threshold); 
-
+		//ROS_INFO("PointCloud: n:[%lu] ", boost::size(msg->points));	 
+  	laser_segmentation::PointCloudSegmented segments_msg;
+  	segments_msg.header = msg->header;	  	
+  
   	if(boost::size(msg->points)==0){
 			return;
 		}	
-  	else {
-			segments_msg.segments[segment_counter].segment.push_back(msg->points[0]);
+
+	  bool lable_changed = false;
+	  laser_segmentation::Segment segment;
+	  
+		for(int i=0; i < boost::size(msg->points); i++) {
+			float delta = 0.0;
+			if(i != 0)
+				delta = calculate_2_point_distance(msg->points[i],msg->points[i-1]);
 			
-			if (has_lables(msg)) 
-				segments_msg.segments[segment_counter].class_id=msg->channels[0].values[0];
-			else
-				segments_msg.segments[segment_counter].class_id=-1;
 
-			//ROS_INFO("Number points: %lu ", boost::size(msg->points));
-  		//ROS_INFO("---------------------------------------- \n Segment: %i ", 0);
-	  	//ROS_INFO("%i, Delta= %f ,Distance= %f",0, 0.0, sqrt(pow(msg->points[0].x,2.0) + pow(msg->points[0].y,2.0)));
-		}
-		  bool lable_changed = false;
-  		for(int i=1; i < boost::size(msg->points); i++) { 		
-				float delta = calculate_2_point_distance(msg->points[i],msg->points[i-1]);
-				
-	
-				//if smaler then threshold save in same segment
-				if(delta <= threshold) {
-					ROS_INFO("delta: %f x:%f y:%f z:%f", delta,msg->points[i].x,msg->points[i].y,msg->points[i].z);
-					segments_msg.segments[segment_counter].segment.push_back(msg->points[i]);
+			//if smaler then threshold save in same segment
+			if(delta <= threshold) {
+				ROS_INFO("delta: %f x:%f y:%f z:%f", delta,msg->points[i].x,msg->points[i].y,msg->points[i].z);
+				segment.points.push_back(msg->points[i]);
+				ROS_INFO("segment.points.back().x: %f",segment.points.back().x);
 
-					if (has_lables(msg)) {
-						if(segments_msg.segments[segment_counter].class_id!=msg->channels[0].values[i]) { //set label to 1 if background or mixture of background and peaople data
-							segments_msg.segments[segment_counter].class_id = 1;
-							if(!lable_changed) {
-								changed_lables_count += 1;
-								lable_changed = true;
-							}					
-						}
-					}else{
-						segments_msg.segments[segment_counter].class_id=-1;
+				if (has_lables(msg)) {
+					if(segment.class_id!=msg->channels[0].values[i]) { //set label to 1 if background or mixture of background and people data
+						segment.class_id = 1;
+						if(!lable_changed) {
+							changed_lables_count += 1;
+							lable_changed = true;
+						}					
 					}
-				//if bigger then threshold save in new segment	
 				}else{
-					ROS_INFO("new segment! delta: %f", delta);
-					segment_counter++;
-					lable_changed = false;
-					segments_msg.segments[segment_counter].segment.push_back(msg->points[i]);
-					if (has_lables(msg))
-						segments_msg.segments[segment_counter].class_id = msg->channels[0].values[i];
-					else
-						segments_msg.segments[segment_counter].class_id=-1;
-			
-					ROS_INFO("---------------------------------------- \n Segment: %i ", segment_counter);
+					segment.class_id=-1;
 				}
-	
-				//ROS_INFO("%i, Delta= %f ,Distance= %f, x= %f, y= %f, class_id= %d",i, delta, 
-				//sqrt(pow(msg->points[i].x,2.0) + pow(msg->points[i].y,2.0)), msg->points[i].x , msg->points[i].y, segments_msg.segments[segment_counter].class_id );
-	  	}
+			//if bigger then threshold save in new segment	
+			}else{
+				ROS_INFO("new segment! delta: %f", delta);
+				segments_msg.segments.push_back(segment);
+				ROS_INFO("segments_msg.segments.back().points.back().x: %f",segments_msg.segments.back().points.back().x);
+				segment = new_segment;
+				lable_changed = false;
+				segment.points.push_back(msg->points[i]);
+				if (has_lables(msg))
+					segment.class_id = msg->channels[0].values[i];
+				else
+					segment.class_id=-1;
+		
+				ROS_INFO("---------------------------------------- \n Segment: %lu ", segments_msg.segments.size());
+			}
 
-  		segments_msg.segments.resize(segment_counter+1);
-  		all_segment_count += segment_counter+1;
-			scan_count++;
-			ROS_INFO("segmentation scan count: %i, segments count: %i, changed lables count: %i",scan_count,all_segment_count,changed_lables_count);
-  		
-  		//ROS_INFO("segments: %lu " , boost::size(segments_msg.segments));
-	  	segments_pub.publish(segments_msg);
-	  	
-	  	visualize_segments(segments_msg);
+			//ROS_INFO("%i, Delta= %f ,Distance= %f, x= %f, y= %f, class_id= %d",i, delta, 
+			//sqrt(pow(msg->points[i].x,2.0) + pow(msg->points[i].y,2.0)), msg->points[i].x , msg->points[i].y, segments_msg.segments[segments_msg.segments.size()].class_id );
+  	}
+  	
+  	segments_msg.segments.push_back(segment); //save last segment
+
+		all_segment_count += segments_msg.segments.size()+1; scan_count++;
+		ROS_INFO("segmentation scan count: %i, segments count: %i, changed lables count: %i",scan_count,all_segment_count,changed_lables_count);
+		
+
+  	segments_pub.publish(segments_msg); 	
+  	visualize_segments(segments_msg);
 
 		
 	}
@@ -123,6 +112,8 @@ public:
 //*****************************************************************************************************************************************//
 //                         																HELPER FUNCTIONS                                                                 //
 //*****************************************************************************************************************************************//
+	
+	
 	
 	float calculate_2_point_distance(geometry_msgs::Point32 A,geometry_msgs::Point32 B) {
 		return sqrt(pow(A.x-B.x,2)+pow(A.y-B.y,2)+pow(A.z-B.z,2));
@@ -171,17 +162,17 @@ public:
 				color.r = 1.0;
 			
 			
-			for (int j = 1; j < boost::size(segments_msg.segments[i].segment); j++)
+			for (int j = 1; j < boost::size(segments_msg.segments[i].points); j++)
 			{
 				  geometry_msgs::Point p;
-				  p.x = segments_msg.segments[i].segment[j-1].x;
-				  p.y = segments_msg.segments[i].segment[j-1].y;
-				  p.z = segments_msg.segments[i].segment[j-1].z;
+				  p.x = segments_msg.segments[i].points[j-1].x;
+				  p.y = segments_msg.segments[i].points[j-1].y;
+				  p.z = segments_msg.segments[i].points[j-1].z;
 				  
 				  geometry_msgs::Point pp;
-	  			pp.x = segments_msg.segments[i].segment[j].x;
-				  pp.y = segments_msg.segments[i].segment[j].y;
-				  pp.z = segments_msg.segments[i].segment[j].z;
+	  			pp.x = segments_msg.segments[i].points[j].x;
+				  pp.y = segments_msg.segments[i].points[j].y;
+				  pp.z = segments_msg.segments[i].points[j].z;
 				
 
 				  // The line list needs two points for each line

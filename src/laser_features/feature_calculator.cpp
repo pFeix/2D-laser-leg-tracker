@@ -40,11 +40,11 @@ public:
 		
 		for(int i= 0; i < boost::size(msg.segments); i++) {
 			laser_features::Segment_featured segment_msg;
-			segment_msg.points = msg.segments[i].segment;
+			segment_msg.points = msg.segments[i].points;
 			
 			
 			//1) Number of points
-			segment_msg.number_of_points = boost::size(msg.segments[i].segment);
+			segment_msg.number_of_points = boost::size(msg.segments[i].points);
 			
 			if(segment_msg.number_of_points < 3)
 				continue;					//skip segments with less then 3 points since geometrical calculations are not possible
@@ -227,11 +227,11 @@ public:
 		float y_axis = std::get<1>(line_param);
 		
 		geometry_msgs::Point32 first_point;
-		first_point.x = segments.segment[0].x;
+		first_point.x = segments.points[0].x;
 		first_point.y = y_axis + (first_point.x * gradient);
 		
 		geometry_msgs::Point32 last_point;
-		last_point.x = segments.segment[number_of_points-1].x;
+		last_point.x = segments.points[number_of_points-1].x;
 		last_point.y = y_axis + (last_point.x * gradient);
 		
 		
@@ -240,7 +240,7 @@ public:
 		float max_dist = -std::numeric_limits<float>::infinity();
 		
 		
-		for(auto &segment : segments.segment) {
+		for(auto &segment : segments.points) {
 			float y_fit = y_axis + gradient * segment.x;
 			float dist = y_fit-segment.y;
 			if(dist < min_dist)
@@ -261,7 +261,7 @@ public:
 	float calculate_Kurtosis(const laser_segmentation::Segment &segments, const int &number_of_points, geometry_msgs::Point32 center, float std_deviation) {
 		float sum = 0.0;
 		for(int i = 0; i<number_of_points; i++) {
-			float distance = sqrt(pow(segments.segment[i].x-center.x,2)+pow(segments.segment[i].y-center.y,2));
+			float distance = sqrt(pow(segments.points[i].x-center.x,2)+pow(segments.points[i].y-center.y,2));
 			sum += pow(distance/std_deviation,4);
 		}
 		return sum/number_of_points;
@@ -270,7 +270,7 @@ public:
 	float calculate_circularity(geometry_msgs::Vector3 fitted_circle, const laser_segmentation::Segment &segments, const int &number_of_points) {
 		float sum_of_squares = 0.0;
 		for(int i = 0; i<number_of_points; i++) {
-			sum_of_squares += pow(fitted_circle.z - sqrt(pow(fitted_circle.x-segments.segment[i].x,2)+pow(fitted_circle.y-segments.segment[i].y,2)),2);
+			sum_of_squares += pow(fitted_circle.z - sqrt(pow(fitted_circle.x-segments.points[i].x,2)+pow(fitted_circle.y-segments.points[i].y,2)),2);
 		}
 		//ROS_INFO("circularity: %f",sum_of_squares);
 		return sum_of_squares;
@@ -284,11 +284,11 @@ public:
 		Eigen::MatrixXd b(number_of_points,1);
 		
 		for(int i = 0; i<number_of_points; i++) {
-			A(i,0) = -2.0*segments.segment[i].x;
-			A(i,1) = -2.0*segments.segment[i].y;
+			A(i,0) = -2.0*segments.points[i].x;
+			A(i,1) = -2.0*segments.points[i].y;
 			A(i,2) = 1.0;
 			
-			b(i,0) = (-pow(segments.segment[i].x,2)-pow(segments.segment[i].y,2));
+			b(i,0) = (-pow(segments.points[i].x,2)-pow(segments.points[i].y,2));
 			
 			//ROS_INFO("row %i: A %f,%f,%f ;  B %f",i,A(i,0),A(i,1),A(i,2),b(i,0));
 		}
@@ -312,13 +312,13 @@ public:
 		float angular_diff = 0.0;
 		for(int i = 2; i<number_of_points; i++) {
 			geometry_msgs::Point32 v_ab;
-			v_ab.x = segments.segment[i-1].x - segments.segment[i-2].x;
-			v_ab.y = segments.segment[i-1].y - segments.segment[i-2].y;
+			v_ab.x = segments.points[i-1].x - segments.points[i-2].x;
+			v_ab.y = segments.points[i-1].y - segments.points[i-2].y;
 			
 			
 			geometry_msgs::Point32 v_bc;
-			v_bc.x = segments.segment[i].x - segments.segment[i-1].x;
-			v_bc.y = segments.segment[i].y - segments.segment[i-1].y;
+			v_bc.x = segments.points[i].x - segments.points[i-1].x;
+			v_bc.y = segments.points[i].y - segments.points[i-1].y;
 			
 			float dot_prod = v_ab.x * v_bc.x + v_ab.y * v_bc.y;
 			float v_ab_mag = sqrt(pow(v_ab.x,2)+pow(v_ab.y,2));
@@ -343,9 +343,9 @@ public:
 	float k = 0.0;
 	
 		for(int i = 2; i<number_of_points; i++) {
-			float d_a = sqrt(pow(segments.segment[i-2].x-segments.segment[i-1].x,2)+pow(segments.segment[i-2].y-segments.segment[i-1].y,2));
-			float d_b = sqrt(pow(segments.segment[i-1].x-segments.segment[i].x,2)+pow(segments.segment[i-1].y-segments.segment[i].y,2));
-			float d_c = sqrt(pow(segments.segment[i-2].x-segments.segment[i].x,2)+pow(segments.segment[i-2].y-segments.segment[i].y,2));
+			float d_a = sqrt(pow(segments.points[i-2].x-segments.points[i-1].x,2)+pow(segments.points[i-2].y-segments.points[i-1].y,2));
+			float d_b = sqrt(pow(segments.points[i-1].x-segments.points[i].x,2)+pow(segments.points[i-1].y-segments.points[i].y,2));
+			float d_c = sqrt(pow(segments.points[i-2].x-segments.points[i].x,2)+pow(segments.points[i-2].y-segments.points[i].y,2));
 			
 			float s = (d_a + d_b + d_c) /2;
 			
@@ -368,7 +368,7 @@ public:
 		float mean = boundary_length/(number_of_points-1);
 		float variance = 0.0;
 		for(int i = 1; i<number_of_points; i++) {
-			variance+= pow(sqrt(pow(segments.segment[i].x-segments.segment[i-1].x,2) + pow(segments.segment[i].y-segments.segment[i-1].y,2)) - mean,2);
+			variance+= pow(sqrt(pow(segments.points[i].x-segments.points[i-1].x,2) + pow(segments.points[i].y-segments.points[i-1].y,2)) - mean,2);
 		}
 		
 		float std_deviation = sqrt(variance);	
@@ -381,7 +381,7 @@ public:
 	
 		float boundary_length = 0.0;
 		for(int i = 1; i<number_of_points; i++) {
-			boundary_length += sqrt(pow(segments.segment[i].x-segments.segment[i-1].x,2) + pow(segments.segment[i].y-segments.segment[i-1].y,2));
+			boundary_length += sqrt(pow(segments.points[i].x-segments.points[i-1].x,2) + pow(segments.points[i].y-segments.points[i-1].y,2));
 		} 
 		//ROS_INFO("boundary length: %f",boundary_length);
 		return boundary_length;
@@ -393,7 +393,7 @@ public:
 		float x_sq_sum = 0.0;
 		float y_sq_sum = 0.0;
 		float x_y_sum = 0.0;
-		for (auto &segment : segments.segment) {
+		for (auto &segment : segments.points) {
 			x_sum += segment.x;
 			y_sum += segment.y;
 			x_sq_sum += segment.x*segment.x;
@@ -424,7 +424,7 @@ public:
 		float y_axis = std::get<1>(line_params);
 		
 		float sq_dist = 0.0;
-		for (auto &segment : segments.segment) {
+		for (auto &segment : segments.points) {
 			float y_fit = y_axis + gradient * segment.x;
 			sq_dist += pow(y_fit-segment.y,2);
 		}
@@ -445,8 +445,8 @@ public:
 	
 	
 	float calculate_width(const laser_segmentation::Segment &segment, const int &number_of_points) {
-		geometry_msgs::Point32 first_point = segment.segment[0];
-		geometry_msgs::Point32 last_point = segment.segment[number_of_points-1];
+		geometry_msgs::Point32 first_point = segment.points[0];
+		geometry_msgs::Point32 last_point = segment.points[number_of_points-1];
 		
 		float width = sqrt(pow(last_point.x - first_point.x, 2)+pow(last_point.y - first_point.y, 2));
 		
@@ -458,8 +458,8 @@ public:
 		if(segment_id==boost::size(msg.segments)-1) 
 			return 0.0;
 			
-		geometry_msgs::Point32 last_point = msg.segments[segment_id].segment[boost::size(msg.segments[segment_id].segment)-1];
-		geometry_msgs::Point32 succeeding_point = msg.segments[segment_id+1].segment[0];	
+		geometry_msgs::Point32 last_point = msg.segments[segment_id].points[boost::size(msg.segments[segment_id].points)-1];
+		geometry_msgs::Point32 succeeding_point = msg.segments[segment_id+1].points[0];	
 			
 		float jump_distance_succeeding = sqrt(pow(last_point.x - succeeding_point.x, 2)+pow(last_point.y - succeeding_point.y, 2));
 			
@@ -472,8 +472,8 @@ public:
 		if(segment_id==0) 
 			return 0.0;
 			
-		geometry_msgs::Point32 first_point = msg.segments[segment_id].segment[0];
-		geometry_msgs::Point32 preceeding_point = msg.segments[segment_id-1].segment[boost::size(msg.segments[segment_id-1].segment)-1];	
+		geometry_msgs::Point32 first_point = msg.segments[segment_id].points[0];
+		geometry_msgs::Point32 preceeding_point = msg.segments[segment_id-1].points[boost::size(msg.segments[segment_id-1].points)-1];	
 
 		float jump_distance_preceeding = sqrt(pow(first_point.x - preceeding_point.x, 2)+pow(first_point.y - preceeding_point.y, 2));
 
@@ -486,17 +486,17 @@ public:
 				
 		geometry_msgs::Point32 median_point;
 		if (number_of_points % 2 == 0) {
-			median_point.x = (segment.segment[number_of_points/2].x + segment.segment[number_of_points/2+1].x)/2;
-			median_point.y = (segment.segment[number_of_points/2].y + segment.segment[number_of_points/2+1].y)/2;
+			median_point.x = (segment.points[number_of_points/2].x + segment.points[number_of_points/2+1].x)/2;
+			median_point.y = (segment.points[number_of_points/2].y + segment.points[number_of_points/2+1].y)/2;
 		} else {
-			median_point = segment.segment[(number_of_points+1)/2];
+			median_point = segment.points[(number_of_points+1)/2];
 		}
 		
 		float mean_average_deviation;
 		mean_average_deviation = 0;
 		
 		for(int i = 0; i < number_of_points; i++) {
-			mean_average_deviation += (segment.segment[i].x-median_point.x) + (segment.segment[i].y-median_point.y);
+			mean_average_deviation += (segment.points[i].x-median_point.x) + (segment.points[i].y-median_point.y);
 		}
 		
 		mean_average_deviation = mean_average_deviation /number_of_points;
@@ -511,7 +511,7 @@ public:
 		
 		float std_deviation = 0;
 		for(int j = 0; j < number_of_points; j++)	{
-			std_deviation += pow((msg.segments[segment_id].segment[j].x - center.x)+(msg.segments[segment_id].segment[j].y - center.y),2);
+			std_deviation += pow((msg.segments[segment_id].points[j].x - center.x)+(msg.segments[segment_id].points[j].y - center.y),2);
 		}
 		std_deviation = sqrt(std_deviation/(number_of_points-1));
 
@@ -522,9 +522,9 @@ public:
 			geometry_msgs::Point32 center;
 			
 			for(int j = 0; j < number_of_points; j++)	{
-				center.x += msg.segments[segment_id].segment[j].x;
-				center.y += msg.segments[segment_id].segment[j].y;
-				center.z += msg.segments[segment_id].segment[j].z;
+				center.x += msg.segments[segment_id].points[j].x;
+				center.y += msg.segments[segment_id].points[j].y;
+				center.z += msg.segments[segment_id].points[j].z;
 			}
 			
 			center.x = center.x/number_of_points;

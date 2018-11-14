@@ -84,7 +84,7 @@ class PointCloudSegmented {
 
   static md5sum() {
     //Returns md5sum for a message object
-    return '01f27048a4424acfc2e3c1dd6636c9d4';
+    return '1fdd18917c0600141633e5caf4a303e6';
   }
 
   static messageDefinition() {
@@ -113,7 +113,7 @@ class PointCloudSegmented {
     
     ================================================================================
     MSG: laser_segmentation/Segment
-    geometry_msgs/Point32[] segment
+    geometry_msgs/Point32[] points
     int32 class_id
     
     ================================================================================

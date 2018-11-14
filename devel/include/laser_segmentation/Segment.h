@@ -25,19 +25,19 @@ struct Segment_
   typedef Segment_<ContainerAllocator> Type;
 
   Segment_()
-    : segment()
+    : points()
     , class_id(0)  {
     }
   Segment_(const ContainerAllocator& _alloc)
-    : segment(_alloc)
+    : points(_alloc)
     , class_id(0)  {
   (void)_alloc;
     }
 
 
 
-   typedef std::vector< ::geometry_msgs::Point32_<ContainerAllocator> , typename ContainerAllocator::template rebind< ::geometry_msgs::Point32_<ContainerAllocator> >::other >  _segment_type;
-  _segment_type segment;
+   typedef std::vector< ::geometry_msgs::Point32_<ContainerAllocator> , typename ContainerAllocator::template rebind< ::geometry_msgs::Point32_<ContainerAllocator> >::other >  _points_type;
+  _points_type points;
 
    typedef int32_t _class_id_type;
   _class_id_type class_id;
@@ -120,12 +120,12 @@ struct MD5Sum< ::laser_segmentation::Segment_<ContainerAllocator> >
 {
   static const char* value()
   {
-    return "429a36c790b8ebc81053c04f038abc20";
+    return "653812b29ee135129fc16022303c10e0";
   }
 
   static const char* value(const ::laser_segmentation::Segment_<ContainerAllocator>&) { return value(); }
-  static const uint64_t static_value1 = 0x429a36c790b8ebc8ULL;
-  static const uint64_t static_value2 = 0x1053c04f038abc20ULL;
+  static const uint64_t static_value1 = 0x653812b29ee13512ULL;
+  static const uint64_t static_value2 = 0x9fc16022303c10e0ULL;
 };
 
 template<class ContainerAllocator>
@@ -144,7 +144,7 @@ struct Definition< ::laser_segmentation::Segment_<ContainerAllocator> >
 {
   static const char* value()
   {
-    return "geometry_msgs/Point32[] segment\n\
+    return "geometry_msgs/Point32[] points\n\
 int32 class_id\n\
 \n\
 ================================================================================\n\
@@ -178,7 +178,7 @@ namespace serialization
   {
     template<typename Stream, typename T> inline static void allInOne(Stream& stream, T m)
     {
-      stream.next(m.segment);
+      stream.next(m.points);
       stream.next(m.class_id);
     }
 
@@ -198,13 +198,13 @@ struct Printer< ::laser_segmentation::Segment_<ContainerAllocator> >
 {
   template<typename Stream> static void stream(Stream& s, const std::string& indent, const ::laser_segmentation::Segment_<ContainerAllocator>& v)
   {
-    s << indent << "segment[]" << std::endl;
-    for (size_t i = 0; i < v.segment.size(); ++i)
+    s << indent << "points[]" << std::endl;
+    for (size_t i = 0; i < v.points.size(); ++i)
     {
-      s << indent << "  segment[" << i << "]: ";
+      s << indent << "  points[" << i << "]: ";
       s << std::endl;
       s << indent;
-      Printer< ::geometry_msgs::Point32_<ContainerAllocator> >::stream(s, indent + "    ", v.segment[i]);
+      Printer< ::geometry_msgs::Point32_<ContainerAllocator> >::stream(s, indent + "    ", v.points[i]);
     }
     s << indent << "class_id: ";
     Printer<int32_t>::stream(s, indent + "  ", v.class_id);

@@ -8,10 +8,10 @@ import struct
 import geometry_msgs.msg
 
 class Segment(genpy.Message):
-  _md5sum = "429a36c790b8ebc81053c04f038abc20"
+  _md5sum = "653812b29ee135129fc16022303c10e0"
   _type = "laser_segmentation/Segment"
   _has_header = False #flag to mark the presence of a Header object
-  _full_text = """geometry_msgs/Point32[] segment
+  _full_text = """geometry_msgs/Point32[] points
 int32 class_id
 
 ================================================================================
@@ -27,7 +27,7 @@ MSG: geometry_msgs/Point32
 float32 x
 float32 y
 float32 z"""
-  __slots__ = ['segment','class_id']
+  __slots__ = ['points','class_id']
   _slot_types = ['geometry_msgs/Point32[]','int32']
 
   def __init__(self, *args, **kwds):
@@ -38,7 +38,7 @@ float32 z"""
     changes.  You cannot mix in-order arguments and keyword arguments.
 
     The available fields are:
-       segment,class_id
+       points,class_id
 
     :param args: complete set of field values, in .msg order
     :param kwds: use keyword arguments corresponding to message field names
@@ -47,12 +47,12 @@ float32 z"""
     if args or kwds:
       super(Segment, self).__init__(*args, **kwds)
       #message fields cannot be None, assign default values for those that are
-      if self.segment is None:
-        self.segment = []
+      if self.points is None:
+        self.points = []
       if self.class_id is None:
         self.class_id = 0
     else:
-      self.segment = []
+      self.points = []
       self.class_id = 0
 
   def _get_types(self):
@@ -67,9 +67,9 @@ float32 z"""
     :param buff: buffer, ``StringIO``
     """
     try:
-      length = len(self.segment)
+      length = len(self.points)
       buff.write(_struct_I.pack(length))
-      for val1 in self.segment:
+      for val1 in self.points:
         _x = val1
         buff.write(_get_struct_3f().pack(_x.x, _x.y, _x.z))
       buff.write(_get_struct_i().pack(self.class_id))
@@ -82,20 +82,20 @@ float32 z"""
     :param str: byte array of serialized message, ``str``
     """
     try:
-      if self.segment is None:
-        self.segment = None
+      if self.points is None:
+        self.points = None
       end = 0
       start = end
       end += 4
       (length,) = _struct_I.unpack(str[start:end])
-      self.segment = []
+      self.points = []
       for i in range(0, length):
         val1 = geometry_msgs.msg.Point32()
         _x = val1
         start = end
         end += 12
         (_x.x, _x.y, _x.z,) = _get_struct_3f().unpack(str[start:end])
-        self.segment.append(val1)
+        self.points.append(val1)
       start = end
       end += 4
       (self.class_id,) = _get_struct_i().unpack(str[start:end])
@@ -111,9 +111,9 @@ float32 z"""
     :param numpy: numpy python module
     """
     try:
-      length = len(self.segment)
+      length = len(self.points)
       buff.write(_struct_I.pack(length))
-      for val1 in self.segment:
+      for val1 in self.points:
         _x = val1
         buff.write(_get_struct_3f().pack(_x.x, _x.y, _x.z))
       buff.write(_get_struct_i().pack(self.class_id))
@@ -127,20 +127,20 @@ float32 z"""
     :param numpy: numpy python module
     """
     try:
-      if self.segment is None:
-        self.segment = None
+      if self.points is None:
+        self.points = None
       end = 0
       start = end
       end += 4
       (length,) = _struct_I.unpack(str[start:end])
-      self.segment = []
+      self.points = []
       for i in range(0, length):
         val1 = geometry_msgs.msg.Point32()
         _x = val1
         start = end
         end += 12
         (_x.x, _x.y, _x.z,) = _get_struct_3f().unpack(str[start:end])
-        self.segment.append(val1)
+        self.points.append(val1)
       start = end
       end += 4
       (self.class_id,) = _get_struct_i().unpack(str[start:end])
