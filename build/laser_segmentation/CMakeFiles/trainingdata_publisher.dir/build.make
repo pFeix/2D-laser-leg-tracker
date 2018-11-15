@@ -107,13 +107,14 @@ trainingdata_publisher_EXTERNAL_OBJECTS =
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/trainingdata_publisher: /opt/ros/kinetic/lib/libroscpp_serialization.so
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/trainingdata_publisher: /opt/ros/kinetic/lib/librostime.so
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/trainingdata_publisher: /opt/ros/kinetic/lib/libcpp_common.so
+/home/pfeix/robot_host_ws/devel/lib/laser_segmentation/trainingdata_publisher: /usr/lib/x86_64-linux-gnu/libconsole_bridge.so
+/home/pfeix/robot_host_ws/devel/lib/laser_segmentation/trainingdata_publisher: /opt/ros/kinetic/lib/liblaser_geometry.so
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/trainingdata_publisher: /usr/lib/x86_64-linux-gnu/libboost_system.so
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/trainingdata_publisher: /usr/lib/x86_64-linux-gnu/libboost_thread.so
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/trainingdata_publisher: /usr/lib/x86_64-linux-gnu/libboost_chrono.so
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/trainingdata_publisher: /usr/lib/x86_64-linux-gnu/libboost_date_time.so
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/trainingdata_publisher: /usr/lib/x86_64-linux-gnu/libboost_atomic.so
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/trainingdata_publisher: /usr/lib/x86_64-linux-gnu/libpthread.so
-/home/pfeix/robot_host_ws/devel/lib/laser_segmentation/trainingdata_publisher: /usr/lib/x86_64-linux-gnu/libconsole_bridge.so
 /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/trainingdata_publisher: laser_segmentation/CMakeFiles/trainingdata_publisher.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/pfeix/robot_host_ws/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable /home/pfeix/robot_host_ws/devel/lib/laser_segmentation/trainingdata_publisher"
 	cd /home/pfeix/robot_host_ws/build/laser_segmentation && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/trainingdata_publisher.dir/link.txt --verbose=$(VERBOSE)

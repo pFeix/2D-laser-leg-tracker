@@ -18,22 +18,22 @@
 
 /*
 TO DO:
--to prevent assignment at any cost -> include meassure not available with high cost(not to high/calclulate cost for specific values) -> handle as if not assigned //study source again
+-to prevent assignment at any cost -> include meassure not available cost //study source again
 
--add max_cost_treshhold for assignment -> if greater recaclulate assignment/use next best solution/set cost to infity/UPPER ONE
+-over max_cost_treshhold -> recaclulate assignment/use next best solution/set cost to infity/UPPER ONE
 
  
 --------------------------------do after rest/segmentation-----------------------------------
 -if target_number < 2 get nearestN of target and if > treshhold also target (increases target not getting lost)
 
--prevent target from get lost(segment error) ? e.g. target gets not assignt because other object has only a bit lower cost -> priotize target (bad idea? because target gets assigned even if not true) ? or just improve scoring/segmenting
+-prevent target from get lost(segment error, oversegmentation) ? e.g. target gets not assignt because other object has only a bit lower cost -> priotize target (bad idea? because target gets assigned even if not true) ? (merge 2 canditate objects but only one meassure -> priotize)
 
 -------------------------------do afterclassification improvement----------------------------------------------------------
 -save propability over time and take middle
--improve cost_function -> appearance ? propability(better classifier needed)
+-improve cost_function -> appearance/propability(better classifier needed)
 
 --------------------------------do after rest-------------------------------------------------------------------
--gating erst treshhold distance spaeter kalman predict
+-improve gating current > max_cost -> later > kalman predict area
 -limit velocity to reasonable value/ calculate better
 -link no match cost to velocity and time not to distance
 
@@ -67,7 +67,7 @@ private:
 	
 	float init_max_distance = 1.5;
 	float scan_max_distance = 1.0;
-	float delete_treshold = 3.0;
+	float delete_treshold = 5.0;
 		
 	float no_match_cost; 
 	
@@ -94,8 +94,8 @@ public:
 		
 		object cost_calc_obj_1;
 		object cost_calc_obj_2;
-		cost_calc_obj_1.pos.x = 1;
-		no_match_cost = calculate_cost(cost_calc_obj_1, cost_calc_obj_2);
+		cost_calc_obj_1.pos.x = 1.5;
+		no_match_cost = calculate_cost(cost_calc_obj_1, cost_calc_obj_2); //calcuclate max cost for assignment by distance of dummy objects
 	}
 	
 
@@ -139,7 +139,7 @@ public:
 		
 			//calculate all costs
 			vector< vector<double> > costMatrix(known_objects.size());
-			ROS_INFO("Cost Matrix: \n");
+			//ROS_INFO("Cost Matrix: \n");
 			for(int i = 0; i < known_objects.size(); i++) {
 				for(int j = 0; j < measured_objects.size(); j++) {
 					float cost = calculate_cost(predicted_objects[i],measured_objects[j]);
@@ -147,9 +147,9 @@ public:
 						costMatrix[i].push_back(cost);
 					else
 						costMatrix[i].push_back(std::numeric_limits<float>::max());
-					std::cout << costMatrix[i][j] << ",";
+					//std::cout << costMatrix[i][j] << ",";
 				}
-				std::cout << "\n";
+				//std::cout << "\n";
 			}
 			
 			//find objects without reasonable cost and stall them
@@ -168,7 +168,7 @@ public:
 					
 					new_object.id = known_objects[i].id;
 					new_object.is_target = known_objects[i].is_target;
-					new_object.vel = update_velocity(known_objects[i].pos, new_object.pos);
+					new_object.vel = update_velocity(known_objects[i].pos, new_object.pos, passed_time);
 					new_objects.push_back(new_object);
 				}
 				else {
@@ -191,6 +191,7 @@ public:
 				mark_target(known_objects);
 				
 			visualize_target(known_objects, msg.header);
+			visualize_pred_way(msg.header, known_objects, passed_time);
 			visualize_ids(known_objects,msg.header);
 		}
 		auto time_2 = std::chrono::high_resolution_clock::now();
@@ -229,7 +230,6 @@ public:
 	{
 		std::vector<object> measured_objects;
 		for(auto &segment: msg.segments) {
-			//ROS_INFO("%f",segment.class_id);
 			object new_measurement;
 			new_measurement.id = -1;
 			new_measurement.pos = segment.center;
@@ -243,33 +243,33 @@ public:
 	}
 
 	//calculate last seen time and save if below time treshhold else let fall
-	void stall_object(std::vector<object>& new_objects, object old_object, const float passed_time) 
+	void stall_object(std::vector<object>& new_objects, const object old_object, const float passed_time) 
 	{
 		object new_object = old_object;
 		new_object.last_seen += passed_time;
 		if(new_object.last_seen < delete_treshold) {
 			new_object.pos = predict_position(new_object.pos,new_object.vel,passed_time);
-			//new_object.vel.x = 0;//new_object.vel.x;
-			//new_object.vel.y = 0;//new_object.vel.y;
-			//new_object.vel.z = 0;//new_object.vel.z;
+			new_object.vel.x = 0;//new_object.vel.x;
+			new_object.vel.y = 0;//new_object.vel.y;
+			new_object.vel.z = 0;//new_object.vel.z;
 			new_objects.push_back(new_object);
 		}
 	}
 	
 	geometry_msgs::Point32 predict_position(geometry_msgs::Point32 pos, const geometry_msgs::Point32 vel, const float passed_time) 
 	{
-		pos.x = pos.x; + vel.x*passed_time;
-		pos.y = pos.y; + vel.y*passed_time;
-		pos.z = pos.z; + vel.z*passed_time;
+		pos.x = pos.x + vel.x*passed_time/2;
+		pos.y = pos.y + vel.y*passed_time/2;
+		pos.z = pos.z + vel.z*passed_time/2;
 		return pos;
 	}
 	
-	geometry_msgs::Point32 update_velocity(geometry_msgs::Point32 old_pos, geometry_msgs::Point32 new_pos)
+	geometry_msgs::Point32 update_velocity(geometry_msgs::Point32 old_pos, geometry_msgs::Point32 new_pos, float passed_time)
 	{
 		geometry_msgs::Point32 vel;
-		vel.x = (new_pos.x - old_pos.x);
-		vel.y = (new_pos.y - old_pos.y);
-		vel.z = (new_pos.z - old_pos.z);
+		vel.x = (new_pos.x - old_pos.x)/passed_time;
+		vel.y = (new_pos.y - old_pos.y)/passed_time;
+		vel.z = (new_pos.z - old_pos.z)/passed_time;
 		return vel;		
 	}
 
@@ -392,7 +392,14 @@ public:
 		//ROS_INFO("target visualization published");
 	}
 	
-	void visualize_pred_way(std_msgs::Header header,geometry_msgs::Point32 pos, geometry_msgs::Point32 vel, float passed_time) {
+	void visualize_pred_way(std_msgs::Header header,const std::vector<object> known_objects, float passed_time) {
+		object target;
+		for(int i = 0; i<known_objects.size(); i++) {
+			if(known_objects[i].is_target)
+				target = known_objects[i];
+		}
+		
+	
 		visualization_msgs::Marker pred_way_arrow;
 		pred_way_arrow.header = header;
 		pred_way_arrow.ns = "pred_way";
@@ -404,13 +411,13 @@ public:
 		geometry_msgs::Point pred_way_arrow_start;
 		geometry_msgs::Point pred_way_arrow_end;
 		
-		pred_way_arrow_start.x = pos.x;
-		pred_way_arrow_start.y = pos.y;
-		pred_way_arrow_start.z = pos.z;
+		pred_way_arrow_start.x = target.pos.x;
+		pred_way_arrow_start.y = target.pos.y;
+		pred_way_arrow_start.z = target.pos.z;
 		
-		pred_way_arrow_end.x = pos.x + vel.x*passed_time;
-		pred_way_arrow_end.y = pos.y + vel.y*passed_time;
-		pred_way_arrow_end.z = pos.z + vel.z*passed_time;
+		pred_way_arrow_end.x = target.pos.x + target.vel.x*passed_time;
+		pred_way_arrow_end.y = target.pos.y + target.vel.y*passed_time;
+		pred_way_arrow_end.z = target.pos.z + target.vel.z*passed_time;
 		pred_way_arrow.points.push_back(pred_way_arrow_start);
 		pred_way_arrow.points.push_back(pred_way_arrow_end);
 		
@@ -457,14 +464,16 @@ int main(int argc, char **argv)
 		
   SegmentTracking STObject;
 
+	ros::Rate r(100);
   while (ros::ok())
 	{		
 		if(_kbhit()) {
 			int c = getchar();
-  		if (c == 'r')
+  		if (c == 'r' || c == 'R')
   			STObject.reset_target();
   	}
 		ros::spinOnce();
+		r.sleep();
 	}
 
   return 0;

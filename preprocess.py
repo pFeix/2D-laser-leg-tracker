@@ -6,6 +6,8 @@ from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
 from sklearn.impute import SimpleImputer
 
+test_size = 0.9
+
 ##---------load data from files
 print('load files...')
 labled_data = np.load('labled_data.npy').item()
@@ -33,7 +35,7 @@ joblib.dump(imp, 'imputer.joblib')
 print('imputation completed: ',imp.get_params())
 
 
-scaled_train_data, scaled_test_data, vec_train_lables, vec_test_lables = train_test_split(scaled_data, vec_lables, test_size=0.3, random_state=0)
+scaled_train_data, scaled_test_data, vec_train_lables, vec_test_lables = train_test_split(scaled_data, vec_lables, test_size=test_size, random_state=0)
 
 
 labled_data['feature_names'] = feature_names;

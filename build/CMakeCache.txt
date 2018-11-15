@@ -419,6 +419,9 @@ laser_features_BINARY_DIR:STATIC=/home/pfeix/robot_host_ws/build/laser_features
 //Value Computed by CMake
 laser_features_SOURCE_DIR:STATIC=/home/pfeix/robot_host_ws/src/laser_features
 
+//The directory containing a CMake configuration file for laser_geometry.
+laser_geometry_DIR:PATH=/opt/ros/kinetic/share/laser_geometry/cmake
+
 //Value Computed by CMake
 laser_segmentation_BINARY_DIR:STATIC=/home/pfeix/robot_host_ws/build/laser_segmentation
 

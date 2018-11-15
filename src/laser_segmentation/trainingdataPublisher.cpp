@@ -29,7 +29,6 @@ public:
 		if(trainingFile.is_open()) {
 			//std::cout << "Is open" << std::endl;
 			int count = 0;
-			//getline(trainingFile,scan);
 			while(getline(trainingFile,scan)) {
 				count++;
 				//std::cout << scan << std::endl;
@@ -46,8 +45,8 @@ public:
 				
 				sensor_msgs::PointCloud point_cloud;
 				point_cloud.header.stamp = ros::Time::now();
-				//point_cloud.header.frame_id = "odom";
-				point_cloud.header.frame_id = "base_link";
+				point_cloud.header.frame_id = "odom";
+				//point_cloud.header.frame_id = "base_link";
 				
 				sensor_msgs::ChannelFloat32 channel;
 				channel.name = "class_label";
@@ -70,6 +69,8 @@ public:
 				
 				data_pub.publish(point_cloud);
 				
+				ros::Rate wait_rate(6);
+				wait_rate.sleep();
 			}
 			ROS_INFO("%i scans published from file",count);
 			trainingFile.close();
@@ -101,16 +102,17 @@ int main(int argc, char **argv)
 	}
 	else {
 		ROS_INFO("enter training data path");
+		exit(0);
 	}
-   
-	exit(0);
+  ros::spin();
+	
 
   /**
    * ros::spin() will enter a loop, pumping callbacks.  With this version, all
    * callbacks will be called from within this thread (the main one).  ros::spin()
    * will exit when Ctrl-C is pressed, or the node is shutdown by the master.
    */
-  ros::spin();
+  
 
   return 0;
 }

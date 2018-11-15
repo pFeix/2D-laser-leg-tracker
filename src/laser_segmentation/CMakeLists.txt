@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   sensor_msgs
   message_generation
+  laser_geometry
 )
 find_package(cmake_modules REQUIRED)
 

@@ -149,6 +149,8 @@ set(CMAKE_MAKEFILE_DEPENDS
   "/opt/ros/kinetic/share/geometry_msgs/cmake/geometry_msgs-msg-paths.cmake"
   "/opt/ros/kinetic/share/geometry_msgs/cmake/geometry_msgsConfig-version.cmake"
   "/opt/ros/kinetic/share/geometry_msgs/cmake/geometry_msgsConfig.cmake"
+  "/opt/ros/kinetic/share/laser_geometry/cmake/laser_geometryConfig-version.cmake"
+  "/opt/ros/kinetic/share/laser_geometry/cmake/laser_geometryConfig.cmake"
   "/opt/ros/kinetic/share/message_filters/cmake/message_filtersConfig-version.cmake"
   "/opt/ros/kinetic/share/message_filters/cmake/message_filtersConfig.cmake"
   "/opt/ros/kinetic/share/message_generation/cmake/message_generationConfig-version.cmake"

@@ -108,7 +108,6 @@ def plot_confusion_matrix(cm, classes,
 	classifier = '?'
 	#plt.text(-1.5,2.05,'Algorithm: '+clf_params['algorithm']+'\nn_estimators:'+str(len(clf.estimators_,))+'\ntree_depth:'+str(clf_params['base_estimator__max_depth']))
 	#plt.text(-1.5,2.05,'precision:'+str(precision)+'\nrecall:'+str(recall)+'\naccuracy:'+str(accuracy))
-	plt.text(-3,3, report)
 	plt.tight_layout()
 	plt.savefig(os.path.join(path,'confusion_matrix.png'))
     

@@ -1,8 +1,12 @@
 #include "ros/ros.h"
 #include "sensor_msgs/PointCloud.h"
+#include "sensor_msgs/LaserScan.h"
 #include "laser_segmentation/PointCloudSegmented.h"
 #include "laser_segmentation/Segment.h"
 #include <visualization_msgs/Marker.h>
+
+#include "laser_geometry/laser_geometry.h"
+#include "tf/transform_listener.h"
 
 class LaserpointSegmentation
 {
@@ -11,63 +15,71 @@ private:
 	ros::Subscriber sub;
 	ros::Publisher segments_pub;
 	ros::Publisher marker_pub;
+	ros::Publisher lable_pub;
 	
 	bool doTrain;
 	int scan_count = 0;
 	int all_segment_count = 0;
 	int segment_error_count = 0;
-	float threshold = 0.05;
+	float threshold = 0.075;
 	int changed_lables_count = 0;
 	
 	laser_segmentation::Segment new_segment;
+	
+	tf::TransformListener listener;
+	laser_geometry::LaserProjection projector;
 
 public:
-
-	//bool isSim = false;
-
-	LaserpointSegmentation(bool isSim) {
-	
-		ROS_INFO("ISSIM: %i" , isSim);
-		if(isSim)
-			sub = n.subscribe("/RosAria/sim_urg_1_pointcloud", 100000, &LaserpointSegmentation::pointCloudCallback, this);
-		else
-	  	sub = n.subscribe("/RosAria/urg_1_pointcloud", 100000, &LaserpointSegmentation::pointCloudCallback, this);
+	LaserpointSegmentation() {
+  	
+  	sub = n.subscribe("/RosAria/urg_1_pointcloud", 100000, &LaserpointSegmentation::pointCloudCallback, this);
+  	//sub = n.subscribe("/RosAria/urg_1_laserscan", 100000, &LaserpointSegmentation::laserScanCallback, this);
 	  		  	
   	segments_pub = n.advertise<laser_segmentation::PointCloudSegmented>("/pointcloud_segments",100000, true);
 		marker_pub = n.advertise<visualization_msgs::Marker>("/visualization_marker", 100000, true);
+		lable_pub = n.advertise<visualization_msgs::Marker>("/annotated_lables", 100000, true);
 	}
 	
 //*****************************************************************************************************************************************//
 //                         																SEGMENTATION                                                                     //
 //*****************************************************************************************************************************************//
+	  
+	  
+	  
+	void laserScanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_in) {
+		sensor_msgs::PointCloud pointCloud;
+		
+		projector.transformLaserScanToPointCloud("laser_frame",*scan_in, pointCloud,listener);
+		pointCloudCallback(pointCloud);
+	}
+	  
 	   
-	void pointCloudCallback(const sensor_msgs::PointCloud::ConstPtr& msg)
+	void pointCloudCallback(const sensor_msgs::PointCloud& msg)
 	{
-		//ROS_INFO("PointCloud: n:[%lu] ", boost::size(msg->points));	 
+		//ROS_INFO("PointCloud: n:[%lu] ", boost::size(msg.points));	 
   	laser_segmentation::PointCloudSegmented segments_msg;
-  	segments_msg.header = msg->header;	  	
+  	segments_msg.header = msg.header;	  	
   
-  	if(boost::size(msg->points)==0){
+  	if(boost::size(msg.points)==0){
 			return;
 		}	
 
 	  bool lable_changed = false;
 	  laser_segmentation::Segment segment;
 	  
-		for(int i=0; i < boost::size(msg->points); i++) {
+		for(int i=0; i < boost::size(msg.points); i++) {
 			float delta = 0.0;
 			if(i != 0)
-				delta = calculate_2_point_distance(msg->points[i],msg->points[i-1]);
+				delta = calculate_2_point_distance(msg.points[i],msg.points[i-1]);
 			
 
 			//if smaler then threshold save in same segment
 			if(delta <= threshold) {
-				ROS_INFO("delta: %f x:%f y:%f z:%f", delta,msg->points[i].x,msg->points[i].y,msg->points[i].z);
-				segment.points.push_back(msg->points[i]);
-				ROS_INFO("segment.points.back().x: %f",segment.points.back().x);
+				ROS_INFO("delta: %f x:%f y:%f z:%f", delta,msg.points[i].x,msg.points[i].y,msg.points[i].z);
+				segment.points.push_back(msg.points[i]);
 
 				if (has_lables(msg)) {
-					if(segment.class_id!=msg->channels[0].values[i]) { //set label to 1 if background or mixture of background and people data
+					if(segment.class_id!=msg.channels[0].values[i]) { //set label to 1 if background or mixture of background and people data
 						segment.class_id = 1;
 						if(!lable_changed) {
 							changed_lables_count += 1;
@@ -81,12 +93,11 @@ public:
 			}else{
 				ROS_INFO("new segment! delta: %f", delta);
 				segments_msg.segments.push_back(segment);
-				ROS_INFO("segments_msg.segments.back().points.back().x: %f",segments_msg.segments.back().points.back().x);
 				segment = new_segment;
 				lable_changed = false;
-				segment.points.push_back(msg->points[i]);
+				segment.points.push_back(msg.points[i]);
 				if (has_lables(msg))
-					segment.class_id = msg->channels[0].values[i];
+					segment.class_id = msg.channels[0].values[i];
 				else
 					segment.class_id=-1;
 		
@@ -94,18 +105,18 @@ public:
 			}
 
 			//ROS_INFO("%i, Delta= %f ,Distance= %f, x= %f, y= %f, class_id= %d",i, delta, 
-			//sqrt(pow(msg->points[i].x,2.0) + pow(msg->points[i].y,2.0)), msg->points[i].x , msg->points[i].y, segments_msg.segments[segments_msg.segments.size()].class_id );
+			//sqrt(pow(msg.points[i].x,2.0) + pow(msg.points[i].y,2.0)), msg.points[i].x , msg.points[i].y, segments_msg.segments[segments_msg.segments.size()].class_id );
   	}
   	
   	segments_msg.segments.push_back(segment); //save last segment
 
 		all_segment_count += segments_msg.segments.size()+1; scan_count++;
-		ROS_INFO("segmentation scan count: %i, segments count: %i, changed lables count: %i",scan_count,all_segment_count,changed_lables_count);
+		ROS_INFO("\nscan count: %i, segments count: %i, changed lables count: %i",scan_count,all_segment_count,changed_lables_count);
 		
 
   	segments_pub.publish(segments_msg); 	
   	visualize_segments(segments_msg);
-
+		visualize_lables(segments_msg);
 		
 	}
 	
@@ -120,8 +131,8 @@ public:
 	}
 	
 	
-	bool has_lables(const sensor_msgs::PointCloud::ConstPtr& msg) {
-		if (boost::size(msg->channels)>0 && msg->channels[0].name == "class_label") {
+	bool has_lables(const sensor_msgs::PointCloud& msg) {
+		if (boost::size(msg.channels)>0 && msg.channels[0].name == "class_label") {
 			return true;
 		} else {
 			return false;
@@ -133,6 +144,40 @@ public:
 //*****************************************************************************************************************************************//
 //                         																VISUALIZATION                                                                    //
 //*****************************************************************************************************************************************//
+
+
+	void visualize_lables(laser_segmentation::PointCloudSegmented segments_msg) {
+		visualization_msgs::Marker center_point;
+		center_point.header = segments_msg.header;
+		center_point.ns = "point_lables";
+		center_point.action = visualization_msgs::Marker::MODIFY;
+		center_point.pose.orientation.w = 1.0;
+		center_point.id = 1;
+		center_point.type = visualization_msgs::Marker::SPHERE_LIST;
+
+		center_point.scale.x = center_point.scale.y = 0.02;
+		center_point.scale.z = 0.05;
+
+		center_point.color.a = 1.0;
+		center_point.color.r = 0.0;
+		center_point.color.g = 1.0;
+		center_point.color.b = 0.0;
+	
+		for(int i = 0; i < segments_msg.segments.size(); i++) {
+			for(int j = 0; j < segments_msg.segments[i].points.size(); j++) {
+				if(segments_msg.segments[i].class_id == 0.0) {
+					geometry_msgs::Point p;
+					p.x = segments_msg.segments[i].points[j].x;
+					p.y = segments_msg.segments[i].points[j].y;
+					p.z = segments_msg.segments[i].points[j].z;
+					
+					center_point.points.push_back(p);
+				}
+			}
+		}
+
+		lable_pub.publish(center_point);
+	}
 		
 	void visualize_segments(laser_segmentation::PointCloudSegmented segments_msg) {
 
@@ -174,7 +219,6 @@ public:
 				  pp.y = segments_msg.segments[i].points[j].y;
 				  pp.z = segments_msg.segments[i].points[j].z;
 				
-
 				  // The line list needs two points for each line
 				  line_list.points.push_back(p);
 				  line_list.colors.push_back(color);
@@ -205,16 +249,9 @@ int main(int argc, char **argv)
    */
   ros::init(argc, argv, "laserSegmentor");
 
-	ROS_INFO("ARG: %s", argv[1]);
-	
-	bool isSim = false;
-	
-	if(argv[1] && boost::lexical_cast<std::string>(argv[1]) == "--sim") {
-			isSim = true;
-	}
+	//ROS_INFO("ARG: %s", argv[1]);
 
-  LaserpointSegmentation LSObject(isSim);
-   
+  LaserpointSegmentation LSObject;
 
 
   /**
