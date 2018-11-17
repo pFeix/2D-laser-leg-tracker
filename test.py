@@ -10,31 +10,37 @@ from sklearn.metrics import classification_report
 
 path = os.path.expanduser('~/robot_host_ws/')
 
-try:
-    path = os.path.join(os.path.expanduser('~/robot_host_ws/'),sys.argv[1])
-    print(path)
-except:
-    print(path)
 
 try:
+	path = os.path.join(os.path.dirname(os.path.abspath(__file__)),sys.argv[1])
+	print(path)
 	pip = joblib.load(os.path.join(path,'pipeline.joblib'))
 	print('pipeline loaded')
 except:
 	print('no pipeline found exiting...')
 	exit()
 
+	
 
 print('loading files...')
-labled_data = np.load('/home/pfeix/robot_host_ws/labled_data.npy').item()
-train_data = labled_data['train_data']
-train_lables = labled_data['train_lables']
+test_data_path = ''
+try:
+    test_data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),sys.argv[2])
+    path = os.path.join(path,sys.argv[2].split('/')[-1]+'/')
+    if not os.path.isdir(path):
+    	os.makedirs (path)
+    print(test_data_path)
+except:
+    print('no test data found .... exiting!')
+    exit()
+    
+labled_data = np.load(test_data_path).item()
 test_data = labled_data['test_data']
 test_lables = labled_data['test_lables']
 feature_names = labled_data['feature_names']
 print('files loaded')
 feature_count = len(feature_names)
 
-#pip = joblib.load(os.path.join(path,'pipeline.joblib'))
 clf = pip.named_steps['classifiy_data']
 clf_params = clf.get_params()
 
@@ -45,13 +51,10 @@ invert_op = getattr(clf, "staged_predict", None)
 has_staged = callable(invert_op)
 
 if has_staged:
-	test_pred = np.array(list(clf.staged_predict(test_data)))
-	train_pred = np.array(list(clf.staged_predict(train_data)))
+	test_pred = np.array(list(pip.staged_predict(test_data)))
 	last_test_pred = test_pred[-1]
-	last_train_pred = train_pred[-1]
 else:
-	last_test_pred = test_pred = clf.predict(test_data)
-	last_train_pred = train_pred = clf.predict(train_data)
+	last_test_pred = test_pred = pip.predict(test_data)
 	
 print('predicted')
 
@@ -126,16 +129,11 @@ def plot_error_graph():
 	for i, y_pred in enumerate(test_pred):
 		clf_err[i] = 1. - accuracy_score(y_pred, test_lables)
 
-	clf_err_train = np.zeros((len(clf.estimators_,)))
-	for i, y_pred in enumerate(train_pred):
-		clf_err_train[i] = 1. - accuracy_score(y_pred, train_lables)
 
 	ax.plot(np.arange(len(clf.estimators_,)) + 1, clf_err,
     label='Test Error',
     color='red')
-	ax.plot(np.arange(len(clf.estimators_,)) + 1, clf_err_train,
-      label='Train Error',
-      color='blue')
+
 
 	ax.set_ylim((0.0, 0.05))
 	ax.set_xlabel('n_estimators')

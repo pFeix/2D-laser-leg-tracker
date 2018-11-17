@@ -3,6 +3,7 @@
 #include "std_msgs/Header.h"
 #include "laser_features/Featured_segments.h"
 #include "laser_features/Segment_featured.h"
+#include "laser_segmentation/Target.h"
 #include "hungarian-algorithm/Hungarian.h"
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -44,9 +45,10 @@ private:
 	ros::NodeHandle n;
 	ros::Subscriber sub;
 	ros::Publisher segments_pub;
-	ros::Publisher target_pub;
+	ros::Publisher target_marker_pub;
 	ros::Publisher pred_way_pub;
 	ros::Publisher id_text_pub;
+	ros::Publisher target_pub;
 	
 	HungarianAlgorithm HungAlgo;
 	
@@ -84,8 +86,8 @@ public:
 
 	SegmentTracking() {
 		  		  	
-  	//segments_pub = n.advertise<laser_segmentation::PointCloudSegmented>("/pointcloud_segments",100000, true);
-		target_pub = n.advertise<visualization_msgs::Marker>("/target_marker", 1, true);
+  	target_pub = n.advertise<laser_segmentation::Target>("/target_info",1, true);
+		target_marker_pub = n.advertise<visualization_msgs::Marker>("/target_marker", 1, true);
 		pred_way_pub = n.advertise<visualization_msgs::Marker>("/pred_way_marker", 1, true);
 		id_text_pub = n.advertise<visualization_msgs::MarkerArray>("/id_text_markers", 1, true);
 		
@@ -190,6 +192,8 @@ public:
 			if(!has_target)
 				mark_target(known_objects);
 				
+				
+			publish_target_pos(msg.header, known_objects);
 			visualize_target(known_objects, msg.header);
 			visualize_pred_way(msg.header, known_objects, passed_time);
 			visualize_ids(known_objects,msg.header);
@@ -204,8 +208,27 @@ public:
 	
 	
 	
-	
-////-----------------------------HELPER-FUNCTIONS-------------------------------------------------------
+//****************************************************************************************************//	
+//-----------------------------HELPER-FUNCTIONS-------------------------------------------------------//
+//****************************************************************************************************//
+	void publish_target_pos(const std_msgs::Header header, const std::vector<object> known_objects) {
+		laser_segmentation::Target target_msg;
+		target_msg.header = header;
+		target_msg.last_seen = -1.0;
+		
+		object target;
+		for(int i = 0; i<known_objects.size(); i++) {
+			if(known_objects[i].is_target) {
+				target = known_objects[i];
+				target_msg.pos = target.pos;
+				target_msg.vel = target.vel;
+				target_msg.last_seen = target.last_seen;
+				break;
+			}
+		}
+
+		target_pub.publish(target_msg);
+	}
 
 	void stall_unassignable_objects(std::vector<object>& known_objects, vector< vector<double> >& costMatrix, vector <object>& new_objects,const float passed_time)
 	{
@@ -236,7 +259,7 @@ public:
 			geometry_msgs::Point32 zero_vel; zero_vel.x = 0; zero_vel.y = 0; zero_vel.z = 0;
 			new_measurement.vel = zero_vel;
 			new_measurement.propability = segment.class_id;
-			new_measurement.distance = segment.distance;
+			new_measurement.distance = segment.distance_to_origin;
 			measured_objects.push_back(new_measurement);
 		}
 		return measured_objects;
@@ -388,7 +411,7 @@ public:
 		arrow.color.g = 1.0;
 		arrow.color.b = 1.0;
 		
-		target_pub.publish(arrow);
+		target_marker_pub.publish(arrow);
 		//ROS_INFO("target visualization published");
 	}
 	

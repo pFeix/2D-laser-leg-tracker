@@ -1,8 +1,0 @@
-prefix=/home/pfeix/robot_host_ws/devel
-
-Name: laser_segmentation
-Description: Description of laser_segmentation
-Version: 0.0.0
-Cflags: -I/home/pfeix/robot_host_ws/devel/include -I/usr/include/eigen3
-Libs: -L/home/pfeix/robot_host_ws/devel/lib 
-Requires: message_runtime

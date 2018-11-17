@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(laser_segmentation)
+project(movement_control)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
@@ -11,15 +11,8 @@ find_package(catkin REQUIRED COMPONENTS
   rosaria
   roscpp
   rospy
-  sensor_msgs
-  message_generation
-  laser_geometry
+  geometry_msgs
 )
-find_package(cmake_modules REQUIRED)
-
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
-
-find_package(Eigen REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -54,13 +47,12 @@ find_package(Eigen REQUIRED)
 ##   * uncomment the generate_messages entry below
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
-# Generate messages in the 'msg' folder
- add_message_files(
-   FILES
-   PointCloudSegmented.msg
-   Segment.msg
-   Target.msg
- )
+## Generate messages in the 'msg' folder
+# add_message_files(
+#   FILES
+#   Message1.msg
+#   Message2.msg
+# )
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -76,12 +68,12 @@ find_package(Eigen REQUIRED)
 #   Action2.action
 # )
 
-# Generate added messages and services with any dependencies listed here
- generate_messages(
-   DEPENDENCIES
-   std_msgs  # Or other packages containing msgs
-   geometry_msgs
- )
+## Generate added messages and services with any dependencies listed here
+# generate_messages(
+#   DEPENDENCIES 
+#   std_msgs  # Or other packages containing msgs
+#   geometry_msgs
+# )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -114,11 +106,9 @@ find_package(Eigen REQUIRED)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES laser_segmentation
-#  CATKIN_DEPENDS rosaria roscpp rospy sensor_msg
+#  LIBRARIES movement_control
+#  CATKIN_DEPENDS rosaria roscpp rospy
 #  DEPENDS system_lib
-  CATKIN_DEPENDS message_runtime
-  DEPENDS Eigen
 )
 
 ###########
@@ -130,12 +120,11 @@ catkin_package(
 include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
-  ${Eigen_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/laser_segmentation.cpp
+#   src/${PROJECT_NAME}/movement_control.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -146,7 +135,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/laser_segmentation_node.cpp)
+# add_executable(${PROJECT_NAME}_node src/movement_control_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -203,7 +192,7 @@ include_directories(
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_laser_segmentation.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_movement_control.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
@@ -211,9 +200,5 @@ include_directories(
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
 
-add_executable(laser_segmentator laserpointSegmentation.cpp)
-add_executable(trainingdata_publisher trainingdataPublisher.cpp)
-add_executable(segment_tracker segmentTracking.cpp hungarian-algorithm/Hungarian.cpp)
-target_link_libraries(laser_segmentator ${catkin_LIBRARIES})
-target_link_libraries(trainingdata_publisher ${catkin_LIBRARIES})
-target_link_libraries(segment_tracker ${catkin_LIBRARIES})
+add_executable(movement_controller movement_controller.cpp)
+target_link_libraries(movement_controller ${catkin_LIBRARIES})
