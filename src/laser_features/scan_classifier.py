@@ -25,7 +25,7 @@ def callback(data):
 	#msg = Featured_segments()
 	for index, i in enumerate(data.segments):
 		start_time = time.clock()
-		features = ({						'distance_to_origin':i.distance,
+		features = ({						#'distance_to_origin':i.distance_to_origin,
 														'number_of_points':i.number_of_points, 
     												'std_deviation':i.std_deviation,
     												'mean_average_deviation_from_median':i.mean_average_deviation_from_median,
@@ -130,7 +130,7 @@ def callback(data):
 		##---------predict class
 		#i.class_id = clf.predict(scaled_data)
 		
-		##---------pipeline: standartize->impute->predict
+		##---------pipeline: impute->(standartize->)predict
 		invert_op = getattr(pip, "predict_proba", None)		
 		if(callable(invert_op)):
 			i.class_id = pip.predict_proba(vec_data)[0][0]

@@ -69,8 +69,8 @@ public:
 				
 				data_pub.publish(point_cloud);
 				
-				ros::Rate wait_rate(6);
-				wait_rate.sleep();
+				ros::Rate wait_rate(16);
+				//wait_rate.sleep();
 			}
 			ROS_INFO("%i scans published from file",count);
 			trainingFile.close();

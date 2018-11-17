@@ -6,6 +6,7 @@
 #include "laser_features/Featured_segments.h"
 //#include <visualization_msgs/Marker.h>
 #include <Eigen/Dense>
+#include <chrono>
 
 
 class FeatureCalculator
@@ -32,7 +33,7 @@ public:
 
 
 	void pointCloudSegmentsCallback(const laser_segmentation::PointCloudSegmented &msg) {
-		
+		auto time_1 = std::chrono::high_resolution_clock::now();
 		laser_features::Featured_segments segments_msg;
 		segments_msg.header = msg.header;
 		
@@ -40,7 +41,6 @@ public:
 		
 		for(int i= 0; i < boost::size(msg.segments); i++) {
 			laser_features::Segment_featured segment_msg;
-			segment_msg.points = msg.segments[i].points;
 			
 			
 			//1) Number of points
@@ -61,7 +61,7 @@ public:
 			//ROS_INFO("Center x: %f, y: %f, z: %f",center.x,center.y,center.z);
 			geometry_msgs::Point32 origin;
 			origin.x = origin.y = origin.z = 0.0;
-			segment_msg.distance = calculate_2_point_distance(segment_msg.center,origin);
+			segment_msg.distance_to_origin = calculate_2_point_distance(segment_msg.center,origin);
 			
 			//0) class_id
 			segment_msg.class_id = msg.segments[i].class_id;
@@ -146,9 +146,9 @@ public:
 			segments_msg.segments[ii].nn_kurtosis														= segments_msg.segments[nn_id].kurtosis;
 		}
 		
-/*		for(int ii= 0; ii < boost::size(segments_msg.segments); ii++) {
+		for(int ii= 0; ii < boost::size(segments_msg.segments); ii++) {
 			laser_features::Segment_featured segment_msg = segments_msg.segments[ii];
-			float norm_var = segment_msg.distance;
+			float norm_var = segment_msg.distance_to_origin;
 			segment_msg.div_distance_number_of_points = segment_msg.number_of_points/norm_var;
 			segment_msg.div_distance_std_deviation		= segment_msg.std_deviation/norm_var;
 			segment_msg.div_distance_mean_average_deviation_from_median =	segment_msg.mean_average_deviation_from_median/norm_var;
@@ -208,7 +208,9 @@ public:
 			
 			segments_msg.segments[ii] = segment_msg;
 		}
-*/		
+		auto time_2 = std::chrono::high_resolution_clock::now();
+		float execution_time = std::chrono::duration_cast<std::chrono::microseconds>(time_2 - time_1).count();
+		ROS_INFO("Execution time (microseconds): %f",execution_time);//float e_t = execution_time.count();
 		scan_count++;
 		ROS_INFO("feature scan count: %i, segments count: %i/%i",scan_count,segments_count,all_segments_count);
 		

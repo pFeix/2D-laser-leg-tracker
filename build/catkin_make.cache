@@ -1,2 +1,0 @@
-keyboard_control:laser_features:laser_segmentation:rosaria
--DCATKIN_DEVEL_PREFIX=/home/pfeix/robot_host_ws/devel -DCMAKE_INSTALL_PREFIX=/home/pfeix/robot_host_ws/install -G Unix Makefiles

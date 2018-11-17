@@ -32,8 +32,8 @@ private:
 public:
 	LaserpointSegmentation() {
   	
-  	sub = n.subscribe("/RosAria/urg_1_pointcloud", 100000, &LaserpointSegmentation::pointCloudCallback, this);
-  	//sub = n.subscribe("/RosAria/urg_1_laserscan", 100000, &LaserpointSegmentation::laserScanCallback, this);
+  	//sub = n.subscribe("/RosAria/urg_1_pointcloud", 100000, &LaserpointSegmentation::pointCloudCallback, this);
+  	sub = n.subscribe("/RosAria/urg_1_laserscan", 100000, &LaserpointSegmentation::laserScanCallback, this);
 	  		  	
   	segments_pub = n.advertise<laser_segmentation::PointCloudSegmented>("/pointcloud_segments",100000, true);
 		marker_pub = n.advertise<visualization_msgs::Marker>("/visualization_marker", 100000, true);
@@ -75,7 +75,7 @@ public:
 
 			//if smaler then threshold save in same segment
 			if(delta <= threshold) {
-				ROS_INFO("delta: %f x:%f y:%f z:%f", delta,msg.points[i].x,msg.points[i].y,msg.points[i].z);
+				//ROS_INFO("delta: %f x:%f y:%f z:%f", delta,msg.points[i].x,msg.points[i].y,msg.points[i].z);
 				segment.points.push_back(msg.points[i]);
 
 				if (has_lables(msg)) {
@@ -91,7 +91,7 @@ public:
 				}
 			//if bigger then threshold save in new segment	
 			}else{
-				ROS_INFO("new segment! delta: %f", delta);
+				//ROS_INFO("new segment! delta: %f", delta);
 				segments_msg.segments.push_back(segment);
 				segment = new_segment;
 				lable_changed = false;
@@ -101,7 +101,7 @@ public:
 				else
 					segment.class_id=-1;
 		
-				ROS_INFO("---------------------------------------- \n Segment: %lu ", segments_msg.segments.size());
+				//ROS_INFO("---------------------------------------- \n Segment: %lu ", segments_msg.segments.size());
 			}
 
 			//ROS_INFO("%i, Delta= %f ,Distance= %f, x= %f, y= %f, class_id= %d",i, delta, 
@@ -111,7 +111,7 @@ public:
   	segments_msg.segments.push_back(segment); //save last segment
 
 		all_segment_count += segments_msg.segments.size()+1; scan_count++;
-		ROS_INFO("\nscan count: %i, segments count: %i, changed lables count: %i",scan_count,all_segment_count,changed_lables_count);
+		ROS_INFO("scan count: %i, segments count: %i, changed lables count: %i",scan_count,all_segment_count,changed_lables_count);
 		
 
   	segments_pub.publish(segments_msg); 	
