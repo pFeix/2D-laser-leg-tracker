@@ -96,7 +96,7 @@ public:
 		
 		object cost_calc_obj_1;
 		object cost_calc_obj_2;
-		cost_calc_obj_1.pos.x = 1.5;
+		cost_calc_obj_1.pos.x = 0.75;
 		no_match_cost = calculate_cost(cost_calc_obj_1, cost_calc_obj_2); //calcuclate max cost for assignment by distance of dummy objects
 	}
 	
@@ -105,9 +105,10 @@ public:
 	{
 		auto time_1 = std::chrono::high_resolution_clock::now();
 		double passed_time = (msg.header.stamp-last_time).toSec();
-		if(last_time == ros::Time(0) || passed_time <= 0.0 || passed_time > 5.0)
+		if(last_time == ros::Time(0))
 			passed_time = 0.0;
 		last_time = msg.header.stamp;
+		ROS_INFO("stamp: %lf",msg.header.stamp.toSec());
 		ROS_INFO("passed_time:%lf",passed_time);
 		
 		
@@ -318,6 +319,7 @@ public:
 	
 	void reset_target() {
 		ROS_INFO("reseting target!");
+		known_objects.clear();
 		for(int i =0; i<known_objects.size(); i++) {
 			known_objects[i].is_target = false;
 		}

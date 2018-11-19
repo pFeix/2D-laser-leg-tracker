@@ -29,8 +29,9 @@ start_time = time.clock()
 imp = joblib.load('imputer.joblib')
 
 
-classifier = 'RandomForest'
+classifier = 'AdaBoost_real'
 rescaling = 'no_rescaling'
+
 if(rescaling != 'no_rescaling' and rescaling != 'standardize'):
 	print('invalid rescaling method!')
 	exit()

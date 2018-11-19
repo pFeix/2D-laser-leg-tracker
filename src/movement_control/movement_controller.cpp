@@ -17,9 +17,19 @@ private:
 	ros::Publisher vel_pub;
 	ros::Subscriber target_sub;
 	ros::Subscriber us_sub;
+	
+	float stop_threshold = 0.5;
+	bool has_obstacale = false;
+	ros::Time last_time = ros::Time(0);
+	
+	float max_angular_speed = 0.5;
+	float min_angular_speed = -0.5;
+	float angular_target_offset = 0.0;
+	
 
 
 public:
+	bool follow_target = false;
 
 	MovementController() {
 		vel_pub = n.advertise<geometry_msgs::Twist>("/RosAria/cmd_vel",1);
@@ -29,26 +39,100 @@ public:
 	
 	void targetInfoCallback(const laser_segmentation::Target &target_msg)
 	{
-		ROS_INFO("Target pos.x: %f pos.y: %f",target_msg.pos.x,target_msg.pos.y);
+		if(follow_target) {
+			ROS_INFO("Target pos.x: %f pos.y: %f",target_msg.pos.x,target_msg.pos.y); //y -> rotation x ->distance
+			geometry_msgs::Twist vel_msg;
+			
+			double passed_time = (target_msg.header.stamp-last_time).toSec();
+			if(last_time == ros::Time(0))
+				passed_time = 0.0;
+			last_time = target_msg.header.stamp;
+			//ROS_INFO("passed_time: %f",passed_time);
+			
+			vel_msg.angular.z = pid_controller(angular_target_offset, target_msg.pos.y, passed_time, max_angular_speed, min_angular_speed);
+			
+			//if(target_msg.pos.y > 0.2)
+			//	vel_msg.angular.z = 0.5; // turn left
+			//else if(target_msg.pos.y < -0.2)
+			//	vel_msg.angular.z = -0.5; // turn right
+			
+			
+			//if(abs(target_msg.pos.y)<0.1 && target_msg.pos.x > 0.75)
+				//vel_msg.linear.x = 0.1; // move to target
+				
+			//publish_vel(vel_msg);
+		}
+		
 	}
 	
 	void ultraSonicCallback(const sensor_msgs::PointCloud &us_msg)
 	{
-		ROS_INFO("N_US_POINTS %lu",us_msg.points.size());
+	
+		
+		float min_distance = std::numeric_limits<float>::infinity();
 		for(int i = 0; i < us_msg.points.size(); i++) {
 			float distance = sqrt(pow(us_msg.points[i].x,2.0)+pow(us_msg.points[i].y,2.0));
-			ROS_INFO("Distance %f",distance);
+			if (distance > 0.0 && distance < min_distance) {
+				min_distance = distance;
+			}
 		}
+		
+		//ROS_INFO("min_distance %f",min_distance);
+		
+		if (min_distance < stop_threshold) {
+			ROS_INFO("Obstacle detected stopping !");
+			geometry_msgs::Twist vel_msg;
+			has_obstacale = true;
+		} else {
+			//ROS_INFO("No Obstacle moving onward.");
+			has_obstacale = false;
+		}
+		
+		
 	}
 	
 
 	void publish_vel(geometry_msgs::Twist vel_msg) {
+		if(has_obstacale && vel_msg.linear.x > 0.0)
+			vel_msg.linear.x = 0.0;
 		vel_pub.publish(vel_msg);
   }
+  
+  float k_p = 0.1;
+	float k_d = 0.1;
+	float k_i = 0.0;
+	float PID_integral = 0.0;
+	float last_offset = 0.0;
+
+	float pid_controller(float target_point, float current_point, float dt, float max_out, float min_out) {
+		float offset = target_point - current_point;
+		PID_integral += offset * dt;
+		float PID_derivate = (offset - last_offset) / dt;
+	
+		float p_out = k_p * offset;
+		float i_out = k_i * PID_integral;
+		float d_out = k_d * PID_derivate;
+	
+		float out = p_out + i_out + d_out;
+		
+		ROS_INFO("out: %f",out);
+	
+		if(out > max_out)
+			out = max_out;
+		
+		if(out < min_out)
+			out = min_out;
+	
+		last_offset = offset;
+	
+		return out;
+	}
 
 
 
 };
+
+
 
 
 int _kbhit() {
@@ -94,18 +178,33 @@ int main(int argc, char **argv)
 
 
 			int c = getchar();   // call your non-blocking input function
-			if (c == 'w')
+			if (c == 'w'){
 		  	vel_msg.linear.x = 0.1;					//ROS_INFO( "W");
-			else if (c == 'a')
+		  	KCObject.publish_vel(vel_msg);
+	  	}
+			else if (c == 'a') {
 		  	vel_msg.angular.z = 0.5;				//ROS_INFO( "A");
-			else if (c == 's')
+		  	KCObject.publish_vel(vel_msg);
+	  	}
+			else if (c == 's'){
 		  	vel_msg.linear.x = -0.1;					//ROS_INFO( "S");
-			else if (c == 'd')
+	  		KCObject.publish_vel(vel_msg);
+	  	}
+			else if (c == 'd') {
 		  	vel_msg.angular.z = -0.5;				//ROS_INFO( "D");
+		  	KCObject.publish_vel(vel_msg);
+	  	}
 			else if (c == 'x') {
-		  	vel_msg.angular.z = 0.0;	vel_msg.linear.x = 0;	}		//ROS_INFO( "D");
-
-			KCObject.publish_vel(vel_msg);
+		  	vel_msg.angular.z = 0.0;		//ROS_INFO( "X");
+		  	vel_msg.linear.x = 0;
+		  	KCObject.publish_vel(vel_msg);	
+	  	}		
+			else if (c == 'l')
+				KCObject.follow_target = !KCObject.follow_target;
+	  	else
+				KCObject.follow_target = false;
+				
+			
 		}
 		ros::Rate r(1000);
 		ros::spinOnce();

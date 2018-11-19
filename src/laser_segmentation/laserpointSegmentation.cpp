@@ -48,8 +48,10 @@ public:
 	  
 	void laserScanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_in) {
 		sensor_msgs::PointCloud pointCloud;
-		
+		ros::Time time = ros::Time::now();
+
 		projector.transformLaserScanToPointCloud("laser_frame",*scan_in, pointCloud,listener);
+		pointCloud.header.stamp = time;
 		pointCloudCallback(pointCloud);
 	}
 	  
