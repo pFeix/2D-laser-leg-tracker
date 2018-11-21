@@ -29,6 +29,12 @@ TO DO:
 
 -over max_cost_treshhold -> recaclulate assignment/use next best solution/set cost to infity/UPPER ONE
 
+-increase frame pulish rate
+
+-track only legs
+
+-add position prediction
+
  
 --------------------------------do after rest/segmentation-----------------------------------
 - if _n target == 2 chekc relationship and possibility -> only keep more viable
@@ -80,9 +86,11 @@ private:
 	float no_match_cost; 
 	
 	ros::Time last_time = ros::Time(0);
+	ros::Time last_time_backup = ros::Time::now();
 	
 	int n_target = 0;
 	int id_count = 1;
+	tf::StampedTransform last_transform_stamp;
 	
 	
 	
@@ -102,7 +110,7 @@ public:
 		
 		object cost_calc_obj_1;
 		object cost_calc_obj_2;
-		cost_calc_obj_1.pos.x = 0.75;
+		cost_calc_obj_1.pos.x = 1.0;
 		no_match_cost = calculate_cost(cost_calc_obj_1, cost_calc_obj_2); //calcuclate max cost for assignment by distance of dummy objects
 	}
 	
@@ -110,12 +118,17 @@ public:
 	void pointCloudCallback(const laser_features::Featured_segments &msg)
 	{
 		auto time_1 = std::chrono::high_resolution_clock::now();
+		ros::Time current_time_backup = ros::Time::now();
 		double passed_time = (msg.header.stamp-last_time).toSec();
 		if(last_time == ros::Time(0))
 			passed_time = 0.0;
+		else if(passed_time <= 0.05 || passed_time > 2.0) {
+			passed_time = (current_time_backup-last_time_backup).toSec();
+		}
 		last_time = msg.header.stamp;
-		//ROS_INFO("stamp: %lf",msg.header.stamp.toSec());
-		//ROS_INFO("passed_time:%lf",passed_time);
+		last_time_backup = current_time_backup;
+		ROS_INFO("stamp: %lf",msg.header.stamp.toSec());
+		ROS_INFO("passed_time:%lf",passed_time);
 		
 		
 		//---------------safe measured objects ---------------------------------
@@ -138,62 +151,77 @@ public:
 		} else {
 			//ROS_INFO("n_objects: %i n_meassured: %i",known_objects.size(),measured_objects.size());
 			
-			object predicted_objects[known_objects.size()]; //kown object predictet by last knewn state
+			vector <object> predicted_objects; //kown object predictet by last knewn state
 			vector <object> new_objects; 										//new objects states
 			
-			//predict next objects position
-			tf::StampedTransform transform_stamp;
-    	tf::TransformListener listener;
-    	listener.waitForTransform("/base_link", "/odom", ros::Time(0), ros::Duration(1.0));
-	    listener.lookupTransform("/base_link", "/odom", ros::Time(0), transform_stamp);
-	    
-	    tf::StampedTransform difference_transform_stamp = transform_stamp;
-			difference_transform_stamp.inverseTimes(last_transform_stamp);
+			tf::Transform difference_transform = calculate_transform();
 			
-			for(int i = 0; i < known_objects.size(); i++) {
-				predicted_objects[i] = predict_object(known_objects[i],passed_time,difference_transform_stamp);
-			}
-			last_transform_stamp = transform_stamp;
+			predicted_objects = predict_objects(known_objects,passed_time,difference_transform);
+			
 		
 			//calculate all costs
-			vector< vector<double> > costMatrix(known_objects.size());
+			vector< vector<double> > costMatrix(predicted_objects.size());
 			//ROS_INFO("Cost Matrix: \n");
-			for(int i = 0; i < known_objects.size(); i++) {
+			for(int i = 0; i < predicted_objects.size(); i++) {
 				for(int j = 0; j < measured_objects.size(); j++) {
-					float cost = calculate_cost(predicted_objects[i],measured_objects[j]);
-					if(cost <= no_match_cost)
+					double cost = calculate_cost(predicted_objects[i],measured_objects[j]);
+					if(cost < no_match_cost)
 						costMatrix[i].push_back(cost);
 					else
-						costMatrix[i].push_back(std::numeric_limits<float>::max());
+						costMatrix[i].push_back(std::numeric_limits<double>::max());
 					//std::cout << costMatrix[i][j] << ",";
 				}
 				//std::cout << "\n";
 			}
 			
 			//find objects without reasonable cost and stall them
-			stall_unassignable_objects(known_objects, costMatrix, new_objects,passed_time);
+			//stall_unassignable_objects(predicted_objects, costMatrix, new_objects,passed_time);
 			
 			
-			//find best assignment
+			
+			
+			double cost = std::numeric_limits<double>::max();
+			int max_iter = costMatrix.size();
 			vector<int> assignment;
-			double cost = HungAlgo.Solve(costMatrix, assignment);
+			while(cost >= std::numeric_limits<double>::max() && max_iter > 0) {
+				//find best assignment
+				assignment.resize(0);
+				cost = HungAlgo.Solve(costMatrix, assignment);
+				ROS_INFO("assignment cost: %lf", cost);
+				double recalculate_treshold = no_match_cost*assignment.size();
+				
+				if(cost >= recalculate_treshold) {
+					for(int i = 0; i<assignment.size();i++) {
+						if(assignment[i]>=0){ //ignore unasigned fields -> segmentation fault
+							if(costMatrix[i][assignment[i]] >= std::numeric_limits<double>::max()) {
+								stall_unassignable_object(predicted_objects, costMatrix, new_objects,passed_time,i);
+								break; //break after staling because ranges changed -> segmentation fault possible
+							}
+						}
+					}
+				}
+				
+				max_iter--;
+			}
+
 			
 			for(int i = 0; i<assignment.size(); i++) {
 				//assign best guess to known objects
 				if(assignment[i] >= 0) {
+					ROS_INFO("assignment: %i -> %i cost: %lf",i,assignment[i],costMatrix[i][assignment[i]]);
 					object new_object = measured_objects[assignment[i]];
 					measured_objects[assignment[i]].assigned = true;
 					
-					new_object.id = known_objects[i].id;
-					new_object.is_target = known_objects[i].is_target;
-					new_object.vel = update_velocity(known_objects[i].pos, new_object.pos, passed_time);
+					new_object.id = predicted_objects[i].id;
+					new_object.is_target = predicted_objects[i].is_target;
+					new_object.vel = update_velocity(known_objects[i].pos, new_object.pos, passed_time, difference_transform); //attentoN!!!!!!!!!!!!!!!!
 					new_objects.push_back(new_object);
 				}
 				else {
-					stall_object(new_objects,known_objects[i],passed_time);			
+					stall_object(new_objects,predicted_objects[i],passed_time);			
 				}
 			}
-		
+					
 			//if no suitable object for meassurements are found create new objects
 			for(int i = 0; i<measured_objects.size(); i++) {
 				if(measured_objects[i].assigned == false) {
@@ -215,8 +243,8 @@ public:
 			visualize_ids(known_objects,msg.header);
 		}
 		auto time_2 = std::chrono::high_resolution_clock::now();
-		//float execution_time = std::chrono::duration_cast<std::chrono::microseconds>(time_2 - time_1).count();
-		//ROS_INFO("Execution time: %f",execution_time);//float e_t = execution_time.count();
+		float execution_time = std::chrono::duration_cast<std::chrono::microseconds>(time_2 - time_1).count()/1000000.0;
+		ROS_INFO("Execution time: %f",execution_time);//float e_t = execution_time.count();
 		//ROS_INFO("no_match_cost: %f",no_match_cost);
 	}
 	
@@ -265,18 +293,23 @@ public:
 		for(int i = 0; i < costMatrix.size(); i++) {
 			bool has_match = false;
 			for(int j = 0; j < costMatrix[i].size(); j++) {
-				if(costMatrix[i][j] <= no_match_cost) {
+				if(costMatrix[i][j] < no_match_cost) {
 					has_match = true;
 					break;
 				}					
 			}
 			if(!has_match) {
-				costMatrix.erase(costMatrix.begin()+i);
-				stall_object(new_objects,known_objects[i],passed_time);
-				known_objects.erase(known_objects.begin()+i);
+				stall_unassignable_object(known_objects, costMatrix, new_objects, passed_time, i);
 				i--;
 			}
 		}
+	}
+	
+	void stall_unassignable_object(std::vector<object>& known_objects, vector< vector<double> >& costMatrix, vector <object>& new_objects,const float passed_time, int i)
+	{
+		costMatrix.erase(costMatrix.begin()+i);
+		stall_object(new_objects,known_objects[i],30.0);
+		known_objects.erase(known_objects.begin()+i);
 	}
 
 	std::vector<object> meassure_objects(const laser_features::Featured_segments &msg)
@@ -301,10 +334,9 @@ public:
 		object new_object = old_object;
 		new_object.last_seen += passed_time;
 		if(new_object.last_seen < delete_treshold) {
-			new_object.pos = predict_position(new_object.pos,new_object.vel,passed_time);
-			new_object.vel.x = 0;//new_object.vel.x;
-			new_object.vel.y = 0;//new_object.vel.y;
-			new_object.vel.z = 0;//new_object.vel.z;
+			new_object.vel.x = 0.0;//new_object.vel.x/2;
+			new_object.vel.y = 0.0;//new_object.vel.y/2;
+			new_object.vel.z = 0.0;//new_object.vel.z/2;
 			new_objects.push_back(new_object);
 		}
 		else if(new_object.is_target == true) {
@@ -320,12 +352,23 @@ public:
 		return pos;
 	}
 	
-	geometry_msgs::Point32 update_velocity(geometry_msgs::Point32 old_pos, geometry_msgs::Point32 new_pos, float passed_time)
+	geometry_msgs::Point32 update_velocity(geometry_msgs::Point32 old_pos, geometry_msgs::Point32 new_pos, float passed_time, tf::Transform transform)
 	{
+		
+		if(old_pos.x == 0.0 && old_pos.y == 0.0 && old_pos.z == 0.0 ) {
+			return old_pos;
+		}
+		
+		old_pos = apply_rotation_change(old_pos, transform.getBasis());
+		old_pos = apply_translation_change(old_pos, transform.getOrigin());
+				
 		geometry_msgs::Point32 vel;
 		vel.x = (new_pos.x - old_pos.x)/passed_time;
 		vel.y = (new_pos.y - old_pos.y)/passed_time;
 		vel.z = (new_pos.z - old_pos.z)/passed_time;
+		
+		
+		ROS_INFO("vel: (%f,%f), old_pos: (%f,%f), new_pos: (%f,%f), passed_time: %f",vel.x, vel.y, old_pos.x, old_pos.y, new_pos.x, new_pos.y, passed_time);
 		return vel;		
 	}
 
@@ -401,69 +444,107 @@ public:
 		n_target = 0;
 	}
 	
-	tf::StampedTransform last_transform_stamp;
-
-	object predict_object(object known_object, float passed_time, tf::StampedTransform difference_transform_stamp) {
-			object predicted_obj = known_object;
-			predicted_obj.pos = predict_position(predicted_obj.pos, predicted_obj.vel, passed_time);
-			
-			//---------------------------
-			
-	    tf::Vector3 tf_pos(predicted_obj.pos.x,predicted_obj.pos.y,predicted_obj.pos.z);
-	    tf_pos = tf_pos*difference_transform_stamp.getBasis();
-	    
-	    predicted_obj.pos.x = tf_pos.x();
-	    predicted_obj.pos.y = tf_pos.y();
-	    predicted_obj.pos.z = tf_pos.z();
-	    
+	tf::Transform calculate_transform(){
+			tf::StampedTransform transform_stamp;
+    	tf::TransformListener listener;
+    	tf::Transform difference_transform;
     	
     	
-    	
-    	
-    	
-    	
-    	
-    	
-    	/*listener.waitForTransform("/base_link", past,
-                              	"/base_link", now,
-                              	"/odom", ros::Duration(1.0));
-    	listener.lookupTransform("/base_link", past,
-                           			"/base_link", now,
-                             		"/odom", transform_stamp);*/
-                
-			//geometry_msgs::PointStamped intitialPoint;
-			//intitialPoint.point.x = predicted_obj.pos.x;
-			//intitialPoint.point.y = predicted_obj.pos.y;
-			//intitialPoint.point.z = predicted_obj.pos.z;
-			//geometry_msgs::PointStamped transformedPoint;
-                             		
-   		//listener.transformPoint("laser_frame_2",intitialPoint,transformedPoint);
-                             		
-   		//tf::Matrix3x3 transform = transform_stamp.getBasis();
-   		
-      //ROS_INFO("%f",transform.transform.translation.x); 
-                             		
-
+	    try{
+	    	listener.waitForTransform("/base_link", "/odom", ros::Time(0), ros::Duration(0.5));
+			  listener.lookupTransform("/base_link", "/odom", ros::Time(0), transform_stamp);
+			  
+				tf::Matrix3x3 rotation_matrix = transform_stamp.getBasis().transpose() * last_transform_stamp.getBasis();
+				tf::Vector3 translation_vector = transform_stamp.getOrigin() - last_transform_stamp.getOrigin();
+				difference_transform = tf::Transform(rotation_matrix,translation_vector);
+				last_transform_stamp = transform_stamp;	
+			} 
+			catch (tf::TransformException ex)
+			{
+				ROS_ERROR("%s",ex.what());
+			}
 			
 			
-			
-			//geometry_msgs::TransformStamped transform_msg;
-			
-			
-			//tf2::doTransform(intitialPoint,transformedPoint,transform_msg);
-			//--------------------------------
-			
-			return predicted_obj;
+			return difference_transform;
 	}
 	
-	float calculate_cost(object A, object B){
+	
+	geometry_msgs::Point32 apply_rotation_change(geometry_msgs::Point32 point, tf::Matrix3x3 rotation_matrix){
+		tf::Vector3 tf_point(point.x,point.y,point.z);
+		tf_point = tf_point*rotation_matrix;
+		
+		geometry_msgs::Point32 transformed_point;
+	  transformed_point.x = tf_point.x();
+	  transformed_point.y = tf_point.y();
+	  transformed_point.z = tf_point.z();
+	  
+	  return transformed_point;
+	}
+	
+	geometry_msgs::Point32 apply_translation_change(geometry_msgs::Point32 point, tf::Vector3 translation_vector){
+		tf::Vector3 tf_point(point.x,point.y,point.z);
+		tf_point = tf_point+translation_vector;
+		
+		geometry_msgs::Point32 transformed_point;
+	  transformed_point.x = tf_point.x();
+	  transformed_point.y = tf_point.y();
+	  transformed_point.z = tf_point.z();
+	  
+	  return transformed_point;
+	}
+
+	vector<object> apply_transform_change(vector<object> predicted_objects, tf::Transform difference_transform) {
+			vector<object> transformed_objects;
+
+			for(int i=0;i<predicted_objects.size(); i++) {
+				object predicted_obj = predicted_objects[i];
+				predicted_obj.pos = apply_rotation_change(predicted_obj.pos,difference_transform.getBasis());
+				predicted_obj.vel = apply_rotation_change(predicted_obj.vel,difference_transform.getBasis());
+				predicted_obj.pos = apply_translation_change(predicted_obj.pos,difference_transform.getOrigin());
+				
+				//tf::Vector3 tf_pos(predicted_obj.pos.x,predicted_obj.pos.y,predicted_obj.pos.z);
+			  //tf_pos = tf_pos*difference_transform.getBasis();
+			  //tf_pos = tf_pos+difference_transform.getOrigin();
+			  
+			  
+			  //predicted_obj.pos.x = tf_pos.x();
+			  //predicted_obj.pos.y = tf_pos.y();
+			  //predicted_obj.pos.z = tf_pos.z();
+			  
+			  transformed_objects.push_back(predicted_obj);
+			}
+			
+
+	      
+			//--------------------------------
+			return transformed_objects;
+	}
+	
+
+	vector<object> predict_objects(vector<object> known_object, float passed_time, tf::Transform difference_transform) {
+			vector<object> predicted_objects;
+		
+			for(int i = 0; i < known_objects.size(); i++) {
+				object predicted_obj = known_object[i];
+				predicted_obj.pos = predict_position(predicted_obj.pos, predicted_obj.vel, passed_time);
+				
+				predicted_objects.push_back(predicted_obj);
+			}
+			
+			predicted_objects = apply_transform_change(predicted_objects, difference_transform);
+	    
+			return predicted_objects;
+	}
+	
+	double calculate_cost(object A, object B){
 		float object_distance = calculate_2_point_distance(A.pos, B.pos);
-		float cost = pow(object_distance,2.0);
+		double cost = pow(object_distance,2.0);
+		//ROS_INFO("cost_claclulation: A=(%f,%f,%f), B=(%f,%f,%f), cost=%lf",A.pos.x,A.pos.y,A.pos.z,B.pos.x,B.pos.y,B.pos.z,cost);
 		return cost;
 	}
 	
 	float calculate_2_point_distance(geometry_msgs::Point32 A,geometry_msgs::Point32 B) {
-		return sqrt(pow(A.x-B.x,2)+pow(A.y-B.y,2)+pow(A.z-B.z,2));
+		return sqrt(pow(A.x-B.x,2.0)+pow(A.y-B.y,2.0)+pow(A.z-B.z,2.0));
 	}
 		
 	
