@@ -8,7 +8,7 @@ from sklearn.impute import SimpleImputer
 import sys
 import os
 
-test_size = 0.99
+test_size = 0.3
 
 ##---------load data from files
 

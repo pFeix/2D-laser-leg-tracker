@@ -145,7 +145,7 @@ public:
 			segments_msg.segments[ii].nn_aspect_ratio												= segments_msg.segments[nn_id].aspect_ratio;
 			segments_msg.segments[ii].nn_kurtosis														= segments_msg.segments[nn_id].kurtosis;
 		}
-		
+		/*
 		for(int ii= 0; ii < boost::size(segments_msg.segments); ii++) {
 			laser_features::Segment_featured segment_msg = segments_msg.segments[ii];
 			float norm_var = segment_msg.distance_to_origin;
@@ -207,7 +207,7 @@ public:
 			segment_msg.mlp_number_kurtosis					= segment_msg.kurtosis*norm_var;
 			
 			segments_msg.segments[ii] = segment_msg;
-		}
+		}*/
 		auto time_2 = std::chrono::high_resolution_clock::now();
 		float execution_time = std::chrono::duration_cast<std::chrono::microseconds>(time_2 - time_1).count();
 		ROS_INFO("Execution time (microseconds): %f",execution_time);//float e_t = execution_time.count();

@@ -34,7 +34,7 @@ public:
 	MovementController() {
 		vel_pub = n.advertise<geometry_msgs::Twist>("/RosAria/cmd_vel",1);
 		target_sub = n.subscribe("/target_info", 1, &MovementController::targetInfoCallback, this);
-		us_sub = n.subscribe("/RosAria/sonar", 1, &MovementController::ultraSonicCallback, this);
+		//us_sub = n.subscribe("/RosAria/sonar", 1, &MovementController::ultraSonicCallback, this);
 	}
 	
 	void targetInfoCallback(const laser_segmentation::Target &target_msg)
@@ -57,10 +57,10 @@ public:
 			//	vel_msg.angular.z = -0.5; // turn right
 			
 			
-			//if(abs(target_msg.pos.y)<0.1 && target_msg.pos.x > 0.75)
-				//vel_msg.linear.x = 0.1; // move to target
+			if(abs(target_msg.pos.y)<0.1 && target_msg.pos.x > 0.75)
+				vel_msg.linear.x = 0.1; // move to target
 				
-			//publish_vel(vel_msg);
+			publish_vel(vel_msg);
 		}
 		
 	}
@@ -98,15 +98,15 @@ public:
 		vel_pub.publish(vel_msg);
   }
   
-  float k_p = 0.1;
+  float k_p = 1;
 	float k_d = 0.1;
 	float k_i = 0.0;
 	float PID_integral = 0.0;
 	float last_offset = 0.0;
 
 	float pid_controller(float target_point, float current_point, float dt, float max_out, float min_out) {
-		float offset = target_point - current_point;
-		PID_integral += offset * dt;
+		float offset = current_point - target_point;
+		//PID_integral += offset * dt;
 		float PID_derivate = (offset - last_offset) / dt;
 	
 		float p_out = k_p * offset;
@@ -115,7 +115,7 @@ public:
 	
 		float out = p_out + i_out + d_out;
 		
-		ROS_INFO("out: %f",out);
+		ROS_INFO("out: %f, p:%f, i:%f, d:%f",out,p_out,i_out,d_out);
 	
 		if(out > max_out)
 			out = max_out;

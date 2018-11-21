@@ -1,6 +1,7 @@
 #include "ros/ros.h"
 #include "sensor_msgs/PointCloud.h"
 #include "std_msgs/Header.h"
+#include "geometry_msgs/PointStamped.h"
 #include "laser_features/Featured_segments.h"
 #include "laser_features/Segment_featured.h"
 #include "laser_segmentation/Target.h"
@@ -8,6 +9,11 @@
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <chrono>
+
+
+#include <tf/transform_listener.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <tf2_ros/transform_broadcaster.h>
 
 
 //for keyboard input
@@ -25,7 +31,7 @@ TO DO:
 
  
 --------------------------------do after rest/segmentation-----------------------------------
--if target_number < 2 get nearestN of target and if > treshhold also target (increases target not getting lost)
+- if _n target == 2 chekc relationship and possibility -> only keep more viable
 
 -prevent target from get lost(segment error, oversegmentation) ? e.g. target gets not assignt because other object has only a bit lower cost -> priotize target (bad idea? because target gets assigned even if not true) ? (merge 2 canditate objects but only one meassure -> priotize)
 
@@ -75,7 +81,7 @@ private:
 	
 	ros::Time last_time = ros::Time(0);
 	
-	bool has_target = false;
+	int n_target = 0;
 	int id_count = 1;
 	
 	
@@ -87,7 +93,7 @@ public:
 	SegmentTracking() {
 		  		  	
   	target_pub = n.advertise<laser_segmentation::Target>("/target_info",1, true);
-		target_marker_pub = n.advertise<visualization_msgs::Marker>("/target_marker", 1, true);
+		target_marker_pub = n.advertise<visualization_msgs::MarkerArray>("/target_marker", 1, true);
 		pred_way_pub = n.advertise<visualization_msgs::Marker>("/pred_way_marker", 1, true);
 		id_text_pub = n.advertise<visualization_msgs::MarkerArray>("/id_text_markers", 1, true);
 		
@@ -108,8 +114,8 @@ public:
 		if(last_time == ros::Time(0))
 			passed_time = 0.0;
 		last_time = msg.header.stamp;
-		ROS_INFO("stamp: %lf",msg.header.stamp.toSec());
-		ROS_INFO("passed_time:%lf",passed_time);
+		//ROS_INFO("stamp: %lf",msg.header.stamp.toSec());
+		//ROS_INFO("passed_time:%lf",passed_time);
 		
 		
 		//---------------safe measured objects ---------------------------------
@@ -136,9 +142,18 @@ public:
 			vector <object> new_objects; 										//new objects states
 			
 			//predict next objects position
+			tf::StampedTransform transform_stamp;
+    	tf::TransformListener listener;
+    	listener.waitForTransform("/base_link", "/odom", ros::Time(0), ros::Duration(1.0));
+	    listener.lookupTransform("/base_link", "/odom", ros::Time(0), transform_stamp);
+	    
+	    tf::StampedTransform difference_transform_stamp = transform_stamp;
+			difference_transform_stamp.inverseTimes(last_transform_stamp);
+			
 			for(int i = 0; i < known_objects.size(); i++) {
-				predicted_objects[i] = predict_object(known_objects[i],passed_time);
+				predicted_objects[i] = predict_object(known_objects[i],passed_time,difference_transform_stamp);
 			}
+			last_transform_stamp = transform_stamp;
 		
 			//calculate all costs
 			vector< vector<double> > costMatrix(known_objects.size());
@@ -189,11 +204,11 @@ public:
 				}
 			}
 					
-			known_objects = new_objects;			
-			if(!has_target)
-				mark_target(known_objects);
+			known_objects = new_objects;
+						
+			mark_target(known_objects);
 				
-				
+							
 			publish_target_pos(msg.header, known_objects);
 			visualize_target(known_objects, msg.header);
 			visualize_pred_way(msg.header, known_objects, passed_time);
@@ -202,7 +217,7 @@ public:
 		auto time_2 = std::chrono::high_resolution_clock::now();
 		//float execution_time = std::chrono::duration_cast<std::chrono::microseconds>(time_2 - time_1).count();
 		//ROS_INFO("Execution time: %f",execution_time);//float e_t = execution_time.count();
-		ROS_INFO("no_match_cost: %f",no_match_cost);
+		//ROS_INFO("no_match_cost: %f",no_match_cost);
 	}
 	
 	
@@ -216,19 +231,33 @@ public:
 		laser_segmentation::Target target_msg;
 		target_msg.header = header;
 		target_msg.last_seen = -1.0;
-		
+				
 		object target;
+		int n_target_found = 0;
 		for(int i = 0; i<known_objects.size(); i++) {
-			if(known_objects[i].is_target) {
+			if(known_objects[i].is_target && known_objects[i].last_seen == 0.0) {
+				n_target_found += 1;
 				target = known_objects[i];
-				target_msg.pos = target.pos;
-				target_msg.vel = target.vel;
-				target_msg.last_seen = target.last_seen;
-				break;
+				target_msg.pos.x += target.pos.x;
+				target_msg.pos.y += target.pos.y;
+				target_msg.pos.z += target.pos.z;
+				target_msg.vel.x += target.vel.x;
+				target_msg.vel.y += target.vel.y;
+				target_msg.vel.z += target.vel.z;
+				
+				if(target_msg.last_seen == -1 || target_msg.last_seen > target.last_seen)
+					target_msg.last_seen = target.last_seen;
 			}
 		}
-
-		target_pub.publish(target_msg);
+		target_msg.pos.x = target_msg.pos.x/n_target_found;
+		target_msg.pos.y = target_msg.pos.y/n_target_found;
+		target_msg.pos.z = target_msg.pos.z/n_target_found;
+		target_msg.vel.x = target_msg.vel.x/n_target_found;
+		target_msg.vel.y = target_msg.vel.y/n_target_found;
+		target_msg.vel.z = target_msg.vel.z/n_target_found;
+		
+		if(n_target_found > 0)
+			target_pub.publish(target_msg);
 	}
 
 	void stall_unassignable_objects(std::vector<object>& known_objects, vector< vector<double> >& costMatrix, vector <object>& new_objects,const float passed_time)
@@ -278,6 +307,9 @@ public:
 			new_object.vel.z = 0;//new_object.vel.z;
 			new_objects.push_back(new_object);
 		}
+		else if(new_object.is_target == true) {
+			n_target -= 1;
+		}
 	}
 	
 	geometry_msgs::Point32 predict_position(geometry_msgs::Point32 pos, const geometry_msgs::Point32 vel, const float passed_time) 
@@ -298,23 +330,66 @@ public:
 	}
 
 	void mark_target(std::vector<object>& known_objects) {
+		ROS_INFO("n_target %i",n_target);
+		if(n_target == 0) {
+	
+			object dummy_object;
+			dummy_object.distance = std::numeric_limits<float>::infinity();
+			object * best_object = &dummy_object;
+	
+			for(int i =0; i<known_objects.size(); i++) {
+				if(known_objects[i].propability >= init_propability_treshold && known_objects[i].distance < best_object->distance) 
+				{
+					best_object = &known_objects[i];
+				}					
+			}
+			ROS_INFO("Searching for target... best object distance: %f propability: %f",best_object->distance,best_object->propability);
+	
+			if(best_object->distance < init_max_distance) {
+				best_object->is_target = true;
+				n_target = 1;
+				ROS_INFO("first target found!");
+			}
+		}
+		if(n_target ==1) {
+			object * target_object;
+			for(int i =0; i<known_objects.size(); i++) {
+				if(known_objects[i].is_target == true) {
+					target_object = &known_objects[i];
+					break;
+				}
+			}
+			object * nearest_neighbour_object = find_nearest_neighbour(known_objects,*target_object);//cant use nearest neigbour id attribute because may be out of date or object list may be changed
+			float distance = calculate_2_point_distance(target_object->pos,nearest_neighbour_object->pos);
+			if(nearest_neighbour_object->propability > init_propability_treshold && distance < 0.5) {
+			 nearest_neighbour_object->is_target = true;
+			 n_target = 2;
+			}
+		}
+		
+		if(n_target ==2) {
+			//check targets -> nn_relationship
+		}
+		
+		
+		
+		
+	}
+	
+	object * find_nearest_neighbour(std::vector<object>& known_objects, object& target_object) {
 		object dummy_object;
-		dummy_object.distance = std::numeric_limits<float>::infinity();
-		object * best_object = &dummy_object;
-		
+		object * nearest_neighbour_object = &dummy_object;
+		float min_distance = std::numeric_limits<float>::infinity();
+		geometry_msgs::Point32 pos_target = target_object.pos;
 		for(int i =0; i<known_objects.size(); i++) {
-			if(known_objects[i].propability >= init_propability_treshold && known_objects[i].distance < best_object->distance) 
-			{
-				best_object = &known_objects[i];
-			}					
+			geometry_msgs::Point32 pos_second_target = known_objects[i].pos;
+			float distance = calculate_2_point_distance(pos_target,pos_second_target);
+			if(distance < min_distance && distance > 0.0) {
+				min_distance = distance;
+				nearest_neighbour_object = &known_objects[i];
+			}
 		}
-		ROS_INFO("Searching for target... best object distance: %f propability: %f",best_object->distance,best_object->propability);
-		
-		if(best_object->distance < init_max_distance) {
-			best_object->is_target = true;
-			has_target = true;
-			ROS_INFO("first target found!");
-		}
+		return nearest_neighbour_object;
 	}
 	
 	void reset_target() {
@@ -323,12 +398,61 @@ public:
 		for(int i =0; i<known_objects.size(); i++) {
 			known_objects[i].is_target = false;
 		}
-		has_target = false;
+		n_target = 0;
 	}
+	
+	tf::StampedTransform last_transform_stamp;
 
-	object predict_object(object known_object, float passed_time) {
+	object predict_object(object known_object, float passed_time, tf::StampedTransform difference_transform_stamp) {
 			object predicted_obj = known_object;
 			predicted_obj.pos = predict_position(predicted_obj.pos, predicted_obj.vel, passed_time);
+			
+			//---------------------------
+			
+	    tf::Vector3 tf_pos(predicted_obj.pos.x,predicted_obj.pos.y,predicted_obj.pos.z);
+	    tf_pos = tf_pos*difference_transform_stamp.getBasis();
+	    
+	    predicted_obj.pos.x = tf_pos.x();
+	    predicted_obj.pos.y = tf_pos.y();
+	    predicted_obj.pos.z = tf_pos.z();
+	    
+    	
+    	
+    	
+    	
+    	
+    	
+    	
+    	
+    	/*listener.waitForTransform("/base_link", past,
+                              	"/base_link", now,
+                              	"/odom", ros::Duration(1.0));
+    	listener.lookupTransform("/base_link", past,
+                           			"/base_link", now,
+                             		"/odom", transform_stamp);*/
+                
+			//geometry_msgs::PointStamped intitialPoint;
+			//intitialPoint.point.x = predicted_obj.pos.x;
+			//intitialPoint.point.y = predicted_obj.pos.y;
+			//intitialPoint.point.z = predicted_obj.pos.z;
+			//geometry_msgs::PointStamped transformedPoint;
+                             		
+   		//listener.transformPoint("laser_frame_2",intitialPoint,transformedPoint);
+                             		
+   		//tf::Matrix3x3 transform = transform_stamp.getBasis();
+   		
+      //ROS_INFO("%f",transform.transform.translation.x); 
+                             		
+
+			
+			
+			
+			//geometry_msgs::TransformStamped transform_msg;
+			
+			
+			//tf2::doTransform(intitialPoint,transformedPoint,transform_msg);
+			//--------------------------------
+			
 			return predicted_obj;
 	}
 	
@@ -381,39 +505,47 @@ public:
 	
 	void visualize_target(const std::vector<object> known_objects, const std_msgs::Header header) {
 		//ROS_INFO("visualizing....  ");
-		object target;
+		visualization_msgs::MarkerArray target_arrow_array;
+		visualization_msgs::Marker del_arrow;
+		del_arrow.header = header;
+		del_arrow.action= del_arrow.DELETEALL;
+		target_arrow_array.markers.push_back(del_arrow);
+		target_marker_pub.publish(target_arrow_array);
+		
+		
 		for(int i = 0; i<known_objects.size(); i++) {
-			if(known_objects[i].is_target)
-				target = known_objects[i];
+			if(known_objects[i].is_target) {
+				visualization_msgs::Marker arrow;
+				object target = known_objects[i];
+				
+				arrow.header = header;
+				arrow.ns = "target";
+				arrow.action = visualization_msgs::Marker::ADD;
+				arrow.pose.orientation.w = 1.0;
+				arrow.id = i;
+				arrow.type = visualization_msgs::Marker::ARROW;
+	
+				geometry_msgs::Point arrow_start;
+				geometry_msgs::Point arrow_end;
+				arrow_start.x = target.pos.x; arrow_start.y = target.pos.y; arrow_start.z = target.pos.z+0.15;
+				arrow_end.x = target.pos.x; arrow_end.y = target.pos.y; arrow_end.z = target.pos.z;
+				arrow.points.push_back(arrow_start);
+				arrow.points.push_back(arrow_end);
+	
+	
+				arrow.scale.x = 0.02; //shaft dia
+				arrow.scale.y = 0.03;	//head dia
+				arrow.scale.z = 0.05;	//head length
+	
+				arrow.color.a = 1.0;
+				arrow.color.r = 1.0;
+				arrow.color.g = 1.0;
+				arrow.color.b = 1.0;
+				target_arrow_array.markers.push_back(arrow);
+			}
 		}
 		
-		//object target = known_objects[0];
-		visualization_msgs::Marker arrow;
-		arrow.header = header;
-		arrow.ns = "target";
-		arrow.action = visualization_msgs::Marker::MODIFY;
-		arrow.pose.orientation.w = 1.0;
-		arrow.id = 0;
-		arrow.type = visualization_msgs::Marker::ARROW;
-		
-		geometry_msgs::Point arrow_start;
-		geometry_msgs::Point arrow_end;
-		arrow_start.x = target.pos.x; arrow_start.y = target.pos.y; arrow_start.z = target.pos.z+0.15;
-		arrow_end.x = target.pos.x; arrow_end.y = target.pos.y; arrow_end.z = target.pos.z;
-		arrow.points.push_back(arrow_start);
-		arrow.points.push_back(arrow_end);
-		
-		
-		arrow.scale.x = 0.02; //shaft dia
-		arrow.scale.y = 0.03;	//head dia
-		arrow.scale.z = 0.05;	//head length
-		
-		arrow.color.a = 1.0;
-		arrow.color.r = 1.0;
-		arrow.color.g = 1.0;
-		arrow.color.b = 1.0;
-		
-		target_marker_pub.publish(arrow);
+		target_marker_pub.publish(target_arrow_array);
 		//ROS_INFO("target visualization published");
 	}
 	

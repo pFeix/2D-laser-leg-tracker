@@ -14,7 +14,7 @@ text_marker_pub = rospy.Publisher('/text_class_marker', MarkerArray, queue_size=
 
 vec = DictVectorizer()
 #scaler = joblib.load('scaler.joblib')
-#imp = joblib.load('imputer.joblib')
+imp = joblib.load('imputer.joblib')
 #clf = joblib.load('classifier.joblib')
 pip = joblib.load('pipeline.joblib')
 
@@ -125,7 +125,7 @@ def callback(data):
 		#scaled_data = scaler.transform(vec_data)
 
 		##---------impute missing data
-		#scaled_data = imp.transform(scaled_data)
+		vec_data = imp.transform(vec_data)
 		
 		##---------predict class
 		#i.class_id = clf.predict(scaled_data)

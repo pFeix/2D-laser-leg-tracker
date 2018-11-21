@@ -52,6 +52,7 @@ public:
 
 		projector.transformLaserScanToPointCloud("laser_frame",*scan_in, pointCloud,listener);
 		pointCloud.header.stamp = time;
+		pointCloud.header.frame_id = "base_link";
 		pointCloudCallback(pointCloud);
 	}
 	  
@@ -254,8 +255,7 @@ int main(int argc, char **argv)
 	//ROS_INFO("ARG: %s", argv[1]);
 
   LaserpointSegmentation LSObject;
-
-
+  
   /**
    * ros::spin() will enter a loop, pumping callbacks.  With this version, all
    * callbacks will be called from within this thread (the main one).  ros::spin()

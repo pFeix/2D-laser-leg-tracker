@@ -29,7 +29,7 @@ start_time = time.clock()
 imp = joblib.load('imputer.joblib')
 
 
-classifier = 'AdaBoost_real'
+classifier = 'RandomForest'
 rescaling = 'no_rescaling'
 
 if(rescaling != 'no_rescaling' and rescaling != 'standardize'):
@@ -69,7 +69,7 @@ if(rescaling=='standardize'):
 classifiers_dict={'AdaBoost_real':AdaBoostClassifier(DecisionTreeClassifier(max_depth=50),algorithm="SAMME.R",n_estimators=250),
 									'AdaBoost_discrete':AdaBoostClassifier(DecisionTreeClassifier(max_depth=1),algorithm="SAMME",n_estimators=50),
 									'GradientTree':GradientBoostingClassifier(n_estimators=50, learning_rate=1.0,max_depth=1, random_state=0,verbose=1),
-									'RandomForest':RandomForestClassifier(n_estimators=100,max_depth=None,verbose=1,n_jobs=-1,class_weight=None,max_features= "auto"),
+									'RandomForest':RandomForestClassifier(n_estimators=50,max_depth=None,verbose=1,n_jobs=-1,class_weight=None,max_features= "auto"),
 									'Neighbors':neighbors.KNeighborsClassifier(50, weights='uniform' ,n_jobs=-1),
 									'linearSVC':svm.LinearSVC(verbose = True),
 									'NB':GaussianNB(),
@@ -98,21 +98,10 @@ if hasattr(clf, 'max_features'):
 	clf_path = os.path.join(clf_path+'max_features:'+str(clf.max_features)+'_')
 
 	
-	
-'''
-if(classifier == 'GradientTree' or classifier == 'AdaBoost_real' or classifier == 'AdaBoost_discrete'):
-	clf_path = os.path.join(clf_path+str(clf.n_estimators)+'_'+str(clf.base_estimator.max_depth)+'/')
-elif(classifier == 'RandomForest'):
-	clf_path = os.path.join(clf_path+str(clf.n_estimators)+'_'+str(clf.max_depth)+'_'+str(clf.class_weight)+'_'+str(clf.max_features)+'/')
-elif(classifier == 'DecissionTree'):
-	clf_path = os.path.join(clf_path+str(clf.max_depth)+'/')
-elif(classifier == 'Neighbors'):
-	clf_path = os.path.join(clf_path+str(clf.max_depth)+'_'+clf.weights+'/')
-'''
 if not os.path.isdir(clf_path):
     os.makedirs (clf_path)
 
-
+print('clf_path: ', clf_path)
 print('learning...')
 									
 clf = clf.fit(train_data, train_lables)
