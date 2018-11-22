@@ -67,12 +67,16 @@ private:
 	struct object {
 		int id;
 		geometry_msgs::Point32 pos;
+		geometry_msgs::Point32 last_pos;
 		geometry_msgs::Point32 vel;
 		float propability;
+		float highest_propability;
 		float distance;
 		bool is_target = false;
 		float last_seen = 0.0;
 		bool assigned = false;
+		float last_pos_change = 0.0;
+		
 	};
 	std::vector<object> known_objects;
 	
@@ -88,7 +92,6 @@ private:
 	ros::Time last_time = ros::Time(0);
 	ros::Time last_time_backup = ros::Time::now();
 	
-	int n_target = 0;
 	int id_count = 1;
 	tf::StampedTransform last_transform_stamp;
 	
@@ -97,12 +100,13 @@ private:
 	
 
 public:
+	tf::StampedTransform current_transform_stamp;
 
 	SegmentTracking() {
 		  		  	
   	target_pub = n.advertise<laser_segmentation::Target>("/target_info",1, true);
 		target_marker_pub = n.advertise<visualization_msgs::MarkerArray>("/target_marker", 1, true);
-		pred_way_pub = n.advertise<visualization_msgs::Marker>("/pred_way_marker", 1, true);
+		pred_way_pub = n.advertise<visualization_msgs::MarkerArray>("/pred_way_marker", 1, true);
 		id_text_pub = n.advertise<visualization_msgs::MarkerArray>("/id_text_markers", 1, true);
 		
 		sub = n.subscribe("/classified_segments", 10, &SegmentTracking::pointCloudCallback, this);
@@ -145,8 +149,8 @@ public:
 				new_object.id = id_count;
 				id_count++;				
 				known_objects.push_back(new_object);
-				mark_target(known_objects);
 			}
+			mark_target(known_objects);
 		//update objects	
 		} else {
 			//ROS_INFO("n_objects: %i n_meassured: %i",known_objects.size(),measured_objects.size());
@@ -158,32 +162,37 @@ public:
 			
 			predicted_objects = predict_objects(known_objects,passed_time,difference_transform);
 			
-		
-			//calculate all costs
-			vector< vector<double> > costMatrix(predicted_objects.size());
-			//ROS_INFO("Cost Matrix: \n");
-			for(int i = 0; i < predicted_objects.size(); i++) {
-				for(int j = 0; j < measured_objects.size(); j++) {
-					double cost = calculate_cost(predicted_objects[i],measured_objects[j]);
-					if(cost < no_match_cost)
-						costMatrix[i].push_back(cost);
-					else
-						costMatrix[i].push_back(std::numeric_limits<double>::max());
-					//std::cout << costMatrix[i][j] << ",";
-				}
-				//std::cout << "\n";
-			}
-			
-			//find objects without reasonable cost and stall them
-			//stall_unassignable_objects(predicted_objects, costMatrix, new_objects,passed_time);
-			
-			
-			
 			
 			double cost = std::numeric_limits<double>::max();
-			int max_iter = costMatrix.size();
+			int max_iter = predicted_objects.size();
+			vector< vector<double> > costMatrix;
 			vector<int> assignment;
+			
 			while(cost >= std::numeric_limits<double>::max() && max_iter > 0) {
+		
+				//calculate all costs
+				costMatrix.resize(0);
+				costMatrix.resize(predicted_objects.size());
+				//ROS_INFO("Cost Matrix: \n");
+				for(int i = 0; i < predicted_objects.size(); i++) {
+					for(int j = 0; j < measured_objects.size(); j++) {
+						double cost = calculate_cost(predicted_objects[i],measured_objects[j]);
+						if(cost < no_match_cost)
+							costMatrix[i].push_back(cost);
+						else
+							costMatrix[i].push_back(std::numeric_limits<double>::max());
+						//std::cout << costMatrix[i][j] << ",";
+					}
+					//std::cout << "\n";
+				}
+			
+				//find objects without reasonable cost and stall them
+				//stall_unassignable_objects(predicted_objects, costMatrix, new_objects,passed_time);
+			
+			
+				
+			
+
 				//find best assignment
 				assignment.resize(0);
 				cost = HungAlgo.Solve(costMatrix, assignment);
@@ -195,6 +204,7 @@ public:
 						if(assignment[i]>=0){ //ignore unasigned fields -> segmentation fault
 							if(costMatrix[i][assignment[i]] >= std::numeric_limits<double>::max()) {
 								stall_unassignable_object(predicted_objects, costMatrix, new_objects,passed_time,i);
+								//predicted_objects.erase(predicted_objects.begin()+i);
 								break; //break after staling because ranges changed -> segmentation fault possible
 							}
 						}
@@ -208,13 +218,14 @@ public:
 			for(int i = 0; i<assignment.size(); i++) {
 				//assign best guess to known objects
 				if(assignment[i] >= 0) {
-					ROS_INFO("assignment: %i -> %i cost: %lf",i,assignment[i],costMatrix[i][assignment[i]]);
+					//ROS_INFO("assignment: %i -> %i cost: %lf",i,assignment[i],costMatrix[i][assignment[i]]);
 					object new_object = measured_objects[assignment[i]];
 					measured_objects[assignment[i]].assigned = true;
 					
 					new_object.id = predicted_objects[i].id;
 					new_object.is_target = predicted_objects[i].is_target;
-					new_object.vel = update_velocity(known_objects[i].pos, new_object.pos, passed_time, difference_transform); //attentoN!!!!!!!!!!!!!!!!
+					new_object.vel = update_velocity(known_objects[i], new_object, passed_time, difference_transform); //attentoN!!!!!!!!!!!!!!!!
+					new_object.last_pos_change = calculate_2_point_distance(new_object.pos,known_objects[i].pos);
 					new_objects.push_back(new_object);
 				}
 				else {
@@ -244,7 +255,7 @@ public:
 		}
 		auto time_2 = std::chrono::high_resolution_clock::now();
 		float execution_time = std::chrono::duration_cast<std::chrono::microseconds>(time_2 - time_1).count()/1000000.0;
-		ROS_INFO("Execution time: %f",execution_time);//float e_t = execution_time.count();
+		//ROS_INFO("Execution time: %f",execution_time);//float e_t = execution_time.count();
 		//ROS_INFO("no_match_cost: %f",no_match_cost);
 	}
 	
@@ -333,49 +344,56 @@ public:
 	{
 		object new_object = old_object;
 		new_object.last_seen += passed_time;
-		if(new_object.last_seen < delete_treshold) {
+		if(new_object.last_seen < delete_treshold && new_object.is_target == true) {
 			new_object.vel.x = 0.0;//new_object.vel.x/2;
 			new_object.vel.y = 0.0;//new_object.vel.y/2;
 			new_object.vel.z = 0.0;//new_object.vel.z/2;
 			new_objects.push_back(new_object);
 		}
-		else if(new_object.is_target == true) {
-			n_target -= 1;
-		}
 	}
 	
 	geometry_msgs::Point32 predict_position(geometry_msgs::Point32 pos, const geometry_msgs::Point32 vel, const float passed_time) 
 	{
-		pos.x = pos.x + vel.x*passed_time/2;
-		pos.y = pos.y + vel.y*passed_time/2;
-		pos.z = pos.z + vel.z*passed_time/2;
+		pos.x = pos.x + vel.x*passed_time;
+		pos.y = pos.y + vel.y*passed_time;
+		pos.z = pos.z + vel.z*passed_time;
 		return pos;
 	}
 	
-	geometry_msgs::Point32 update_velocity(geometry_msgs::Point32 old_pos, geometry_msgs::Point32 new_pos, float passed_time, tf::Transform transform)
+	geometry_msgs::Point32 update_velocity(object old_obj, object new_obj, float passed_time, tf::Transform transform)
 	{
 		
-		if(old_pos.x == 0.0 && old_pos.y == 0.0 && old_pos.z == 0.0 ) {
-			return old_pos;
+		if(old_obj.pos.x == 0.0 && old_obj.pos.y == 0.0 && old_obj.pos.z == 0.0 ) {
+			return old_obj.pos;
 		}
+		passed_time = passed_time + old_obj.last_seen;
 		
-		old_pos = apply_rotation_change(old_pos, transform.getBasis());
-		old_pos = apply_translation_change(old_pos, transform.getOrigin());
+		old_obj.pos = apply_rotation_change(old_obj.pos, transform.getBasis());
+		old_obj.pos = apply_translation_change(old_obj.pos, transform.getOrigin());
 				
 		geometry_msgs::Point32 vel;
-		vel.x = (new_pos.x - old_pos.x)/passed_time;
-		vel.y = (new_pos.y - old_pos.y)/passed_time;
-		vel.z = (new_pos.z - old_pos.z)/passed_time;
+		vel.x = (new_obj.pos.x - old_obj.pos.x)/passed_time/3;
+		vel.y = (new_obj.pos.y - old_obj.pos.y)/passed_time/3;
+		vel.z = (new_obj.pos.z - old_obj.pos.z)/passed_time/3;
 		
 		
-		ROS_INFO("vel: (%f,%f), old_pos: (%f,%f), new_pos: (%f,%f), passed_time: %f",vel.x, vel.y, old_pos.x, old_pos.y, new_pos.x, new_pos.y, passed_time);
+		//ROS_INFO("vel: (%f,%f), old_pos: (%f,%f), new_pos: (%f,%f), passed_time: %f",vel.x, vel.y, old_obj.pos.x, old_obj.pos.y, new_obj.pos.x, new_obj.pos.y, passed_time);
 		return vel;		
 	}
 
 	void mark_target(std::vector<object>& known_objects) {
-		ROS_INFO("n_target %i",n_target);
-		if(n_target == 0) {
-	
+		int n_target_found = 0;
+
+		
+		for(int i = 0; i<known_objects.size(); i++) {
+			if(known_objects[i].is_target == true) {
+				n_target_found += 1;
+			}
+		}
+		ROS_INFO("n_target %i",n_target_found);
+		
+		if(n_target_found <= 0) {
+			n_target_found = 0;
 			object dummy_object;
 			dummy_object.distance = std::numeric_limits<float>::infinity();
 			object * best_object = &dummy_object;
@@ -390,11 +408,11 @@ public:
 	
 			if(best_object->distance < init_max_distance) {
 				best_object->is_target = true;
-				n_target = 1;
+				n_target_found = 1;
 				ROS_INFO("first target found!");
 			}
 		}
-		if(n_target ==1) {
+		if(n_target_found ==1) {
 			object * target_object;
 			for(int i =0; i<known_objects.size(); i++) {
 				if(known_objects[i].is_target == true) {
@@ -404,13 +422,37 @@ public:
 			}
 			object * nearest_neighbour_object = find_nearest_neighbour(known_objects,*target_object);//cant use nearest neigbour id attribute because may be out of date or object list may be changed
 			float distance = calculate_2_point_distance(target_object->pos,nearest_neighbour_object->pos);
-			if(nearest_neighbour_object->propability > init_propability_treshold && distance < 0.5) {
+			if(nearest_neighbour_object->propability > 0.5 && distance < 0.5) {
 			 nearest_neighbour_object->is_target = true;
-			 n_target = 2;
+			 n_target_found = 2;
 			}
 		}
 		
-		if(n_target ==2) {
+		if(n_target_found ==2) {
+			int n_target_found = 0;
+			int id_target_1 = -1;
+			int id_target_2 = -1;
+			for(int i = 0; i<known_objects.size(); i++) {
+				if(known_objects[i].is_target == true) {
+					n_target_found += 1;
+					if(n_target_found == 1) {
+					 id_target_1 = i;
+					} else if(n_target_found == 2) {	
+					 id_target_2 = i;
+					}
+				}
+			}
+			
+			
+			float distance = calculate_2_point_distance(known_objects[id_target_1].pos,known_objects[id_target_2].pos);
+			ROS_INFO("2 target distance: %f",distance);
+			if(distance >= 0.5) {
+				if(known_objects[id_target_1].last_pos_change > known_objects[id_target_2].last_pos_change) {
+					known_objects[id_target_1].is_target = false;
+				} else {
+					known_objects[id_target_2].is_target = false;
+				}
+			}
 			//check targets -> nn_relationship
 		}
 		
@@ -441,18 +483,16 @@ public:
 		for(int i =0; i<known_objects.size(); i++) {
 			known_objects[i].is_target = false;
 		}
-		n_target = 0;
 	}
 	
 	tf::Transform calculate_transform(){
-			tf::StampedTransform transform_stamp;
-    	tf::TransformListener listener;
+			tf::StampedTransform transform_stamp = current_transform_stamp;
+
     	tf::Transform difference_transform;
     	
     	
 	    try{
-	    	listener.waitForTransform("/base_link", "/odom", ros::Time(0), ros::Duration(0.5));
-			  listener.lookupTransform("/base_link", "/odom", ros::Time(0), transform_stamp);
+
 			  
 				tf::Matrix3x3 rotation_matrix = transform_stamp.getBasis().transpose() * last_transform_stamp.getBasis();
 				tf::Vector3 translation_vector = transform_stamp.getOrigin() - last_transform_stamp.getOrigin();
@@ -467,6 +507,8 @@ public:
 			
 			return difference_transform;
 	}
+	
+	
 	
 	
 	geometry_msgs::Point32 apply_rotation_change(geometry_msgs::Point32 point, tf::Matrix3x3 rotation_matrix){
@@ -526,7 +568,7 @@ public:
 		
 			for(int i = 0; i < known_objects.size(); i++) {
 				object predicted_obj = known_object[i];
-				predicted_obj.pos = predict_position(predicted_obj.pos, predicted_obj.vel, passed_time);
+				//predicted_obj.pos = predict_position(predicted_obj.pos, predicted_obj.vel, passed_time);
 				
 				predicted_objects.push_back(predicted_obj);
 			}
@@ -631,45 +673,52 @@ public:
 	}
 	
 	void visualize_pred_way(std_msgs::Header header,const std::vector<object> known_objects, float passed_time) {
-		object target;
+		
+		visualization_msgs::MarkerArray pred_way_arrow_array;
+		visualization_msgs::Marker del_arrow;
+		del_arrow.header = header;
+		del_arrow.action= del_arrow.DELETEALL;
+		pred_way_arrow_array.markers.push_back(del_arrow);
+		pred_way_pub.publish(pred_way_arrow_array);
+		
+		
 		for(int i = 0; i<known_objects.size(); i++) {
-			if(known_objects[i].is_target)
-				target = known_objects[i];
+			if(known_objects[i].is_target) {
+				visualization_msgs::Marker pred_way_arrow;
+				pred_way_arrow.header = header;
+				pred_way_arrow.ns = "pred_way";
+				pred_way_arrow.action = visualization_msgs::Marker::ADD;
+				pred_way_arrow.pose.orientation.w = 1.0;
+				pred_way_arrow.id = i;
+				pred_way_arrow.type = visualization_msgs::Marker::ARROW;
+		
+				geometry_msgs::Point pred_way_arrow_start;
+				geometry_msgs::Point pred_way_arrow_end;
+		
+				pred_way_arrow_start.x = known_objects[i].pos.x;
+				pred_way_arrow_start.y = known_objects[i].pos.y;
+				pred_way_arrow_start.z = known_objects[i].pos.z;
+		
+				pred_way_arrow_end.x = known_objects[i].pos.x + known_objects[i].vel.x*passed_time;
+				pred_way_arrow_end.y = known_objects[i].pos.y + known_objects[i].vel.y*passed_time;
+				pred_way_arrow_end.z = known_objects[i].pos.z + known_objects[i].vel.z*passed_time;
+				pred_way_arrow.points.push_back(pred_way_arrow_start);
+				pred_way_arrow.points.push_back(pred_way_arrow_end);
+		
+		
+				pred_way_arrow.scale.x = 0.02; 	//shaft dia
+				pred_way_arrow.scale.y = 0.03;	//head dia
+				pred_way_arrow.scale.z = 0.05;	//head length
+		
+				pred_way_arrow.color.a = 1.0;
+				pred_way_arrow.color.r = 1.0;
+				pred_way_arrow.color.g = 1.0;
+				pred_way_arrow.color.b = 1.0;
+				pred_way_arrow_array.markers.push_back(pred_way_arrow);
+			}
 		}
 		
-	
-		visualization_msgs::Marker pred_way_arrow;
-		pred_way_arrow.header = header;
-		pred_way_arrow.ns = "pred_way";
-		pred_way_arrow.action = visualization_msgs::Marker::MODIFY;
-		pred_way_arrow.pose.orientation.w = 1.0;
-		pred_way_arrow.id = 0;
-		pred_way_arrow.type = visualization_msgs::Marker::ARROW;
-		
-		geometry_msgs::Point pred_way_arrow_start;
-		geometry_msgs::Point pred_way_arrow_end;
-		
-		pred_way_arrow_start.x = target.pos.x;
-		pred_way_arrow_start.y = target.pos.y;
-		pred_way_arrow_start.z = target.pos.z;
-		
-		pred_way_arrow_end.x = target.pos.x + target.vel.x*passed_time;
-		pred_way_arrow_end.y = target.pos.y + target.vel.y*passed_time;
-		pred_way_arrow_end.z = target.pos.z + target.vel.z*passed_time;
-		pred_way_arrow.points.push_back(pred_way_arrow_start);
-		pred_way_arrow.points.push_back(pred_way_arrow_end);
-		
-		
-		pred_way_arrow.scale.x = 0.02; 	//shaft dia
-		pred_way_arrow.scale.y = 0.03;	//head dia
-		pred_way_arrow.scale.z = 0.05;	//head length
-		
-		pred_way_arrow.color.a = 1.0;
-		pred_way_arrow.color.r = 1.0;
-		pred_way_arrow.color.g = 1.0;
-		pred_way_arrow.color.b = 1.0;
-		
-		pred_way_pub.publish(pred_way_arrow);
+		pred_way_pub.publish(pred_way_arrow_array);
 	}
 };
 
@@ -710,6 +759,21 @@ int main(int argc, char **argv)
   		if (c == 'r' || c == 'R')
   			STObject.reset_target();
   	}
+  	
+  	try 
+  	{
+			tf::TransformListener listener;
+			listener.waitForTransform("/base_link", "/odom", ros::Time(0), ros::Duration(0.5));
+			listener.lookupTransform("/base_link", "/odom", ros::Time(0), STObject.current_transform_stamp);
+		} 
+		catch (tf::TransformException ex)
+		{
+			ROS_ERROR("%s",ex.what());
+		}
+  	
+  	
+  	
+  	
 		ros::spinOnce();
 		r.sleep();
 	}

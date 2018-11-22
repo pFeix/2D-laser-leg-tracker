@@ -34,7 +34,7 @@ public:
 	MovementController() {
 		vel_pub = n.advertise<geometry_msgs::Twist>("/RosAria/cmd_vel",1);
 		target_sub = n.subscribe("/target_info", 1, &MovementController::targetInfoCallback, this);
-		//us_sub = n.subscribe("/RosAria/sonar", 1, &MovementController::ultraSonicCallback, this);
+		us_sub = n.subscribe("/RosAria/sonar", 1, &MovementController::ultraSonicCallback, this);
 	}
 	
 	void targetInfoCallback(const laser_segmentation::Target &target_msg)
