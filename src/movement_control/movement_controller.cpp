@@ -18,12 +18,12 @@ private:
 	ros::Subscriber target_sub;
 	ros::Subscriber us_sub;
 	
-	float stop_threshold = 0.5;
+	float stop_threshold = 0.75;
 	bool has_obstacale = false;
 	ros::Time last_time = ros::Time(0);
 	
-	float max_angular_speed = 0.5;
-	float min_angular_speed = -0.5;
+	float max_angular_speed = 1;
+	float min_angular_speed = -1;
 	float angular_target_offset = 0.0;
 	
 
@@ -58,7 +58,7 @@ public:
 			
 			
 			if(abs(target_msg.pos.y)<0.1 && target_msg.pos.x > 0.75)
-				vel_msg.linear.x = 0.1; // move to target
+				vel_msg.linear.x = 0.25; // move to target
 				
 			publish_vel(vel_msg);
 		}
@@ -98,8 +98,8 @@ public:
 		vel_pub.publish(vel_msg);
   }
   
-  float k_p = 1;
-	float k_d = 0.1;
+  float k_p = 0.75;
+	float k_d = 0.25;
 	float k_i = 0.0;
 	float PID_integral = 0.0;
 	float last_offset = 0.0;

@@ -70,7 +70,6 @@ private:
 		geometry_msgs::Point32 last_pos;
 		geometry_msgs::Point32 vel;
 		float propability;
-		float highest_propability;
 		float distance;
 		bool is_target = false;
 		float last_seen = 0.0;
