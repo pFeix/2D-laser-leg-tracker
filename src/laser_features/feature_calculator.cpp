@@ -26,8 +26,6 @@ public:
 	FeatureCalculator() {
 			sub = n.subscribe("/pointcloud_segments", 100000, &FeatureCalculator::pointCloudSegmentsCallback, this);
   		features_pub = n.advertise<laser_features::Featured_segments>("/featured_segments",100000, true);
-
-
 			marker_pub = n.advertise<visualization_msgs::Marker>("/visualization_marker", 1000);
 	}
 
@@ -35,6 +33,7 @@ public:
 	void pointCloudSegmentsCallback(const laser_segmentation::PointCloudSegmented &msg) {
 		auto time_1 = std::chrono::high_resolution_clock::now();
 		laser_features::Featured_segments segments_msg;
+		segments_msg.odom = msg.odom;
 		segments_msg.header = msg.header;
 		
 		all_segments_count += boost::size(msg.segments);

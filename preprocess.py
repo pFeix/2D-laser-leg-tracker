@@ -15,6 +15,13 @@ test_size = 0.3
 path = ""
 
 try:
+	test_size = int(sys.argv[2])
+except:
+	print("no test_size given using default")
+	
+print("test_size: ",test_size)
+
+try:
   path = os.path.join(os.path.dirname(os.path.abspath(__file__)),sys.argv[1])
   print(path)
 except:
@@ -33,10 +40,10 @@ for i in features:
 														'number_of_points':i.number_of_points, 
 														'std_deviation':i.std_deviation,
 														'mean_average_deviation_from_median':i.mean_average_deviation_from_median,
-														'jump_distance_preceeding':i.jump_distance_preceeding,
-														'jump_distance_succeeding':i.jump_distance_succeeding,
+														#'jump_distance_preceeding':i.jump_distance_preceeding,
+														#'jump_distance_succeeding':i.jump_distance_succeeding,
 														'nearest_distance':i.nearest_distance,
-														'sum_of_distances':i.sum_of_distances,
+														#'sum_of_distances':i.sum_of_distances,
 														'width':i.width,
 														'linearity':i.linearity,
 														'radius':i.radius,

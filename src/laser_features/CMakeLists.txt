@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
 	laser_segmentation
 	geometry_msgs
 	std_msgs
+	nav_msgs
 )
 
 find_package(cmake_modules REQUIRED)
@@ -82,6 +83,7 @@ find_package(Eigen REQUIRED)
    DEPENDENCIES
    geometry_msgs  # Or other packages containing msgs
    std_msgs
+   nav_msgs
  )
 
 ################################################

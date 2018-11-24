@@ -22,17 +22,16 @@ pip = joblib.load('pipeline.joblib')
 def callback(data):	
 
 	scan_start_time = time.clock()
-	#msg = Featured_segments()
 	for index, i in enumerate(data.segments):
 		start_time = time.clock()
 		features = ({						#'distance_to_origin':i.distance_to_origin,
 														'number_of_points':i.number_of_points, 
     												'std_deviation':i.std_deviation,
     												'mean_average_deviation_from_median':i.mean_average_deviation_from_median,
-    												'jump_distance_preceeding':i.jump_distance_preceeding,
-    												'jump_distance_succeeding':i.jump_distance_succeeding,
+    												#'jump_distance_preceeding':i.jump_distance_preceeding,
+    												#'jump_distance_succeeding':i.jump_distance_succeeding,
     												'nearest_distance':i.nearest_distance,
-														'sum_of_distances':i.sum_of_distances,
+														#'sum_of_distances':i.sum_of_distances,
     												'width':i.width,
     												'linearity':i.linearity,
     												'radius':i.radius,

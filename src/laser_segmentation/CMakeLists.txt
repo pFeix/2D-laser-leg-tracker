@@ -81,6 +81,7 @@ find_package(Eigen REQUIRED)
    DEPENDENCIES
    std_msgs  # Or other packages containing msgs
    geometry_msgs
+   nav_msgs
  )
 
 ################################################

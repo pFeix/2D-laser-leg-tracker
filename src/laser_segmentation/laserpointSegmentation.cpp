@@ -1,6 +1,7 @@
 #include "ros/ros.h"
 #include "sensor_msgs/PointCloud.h"
 #include "sensor_msgs/LaserScan.h"
+#include "nav_msgs/Odometry.h"
 #include "laser_segmentation/PointCloudSegmented.h"
 #include "laser_segmentation/Segment.h"
 #include <visualization_msgs/Marker.h>
@@ -13,6 +14,7 @@ class LaserpointSegmentation
 private:
 	ros::NodeHandle n;
 	ros::Subscriber sub;
+	ros::Subscriber odom_sub;
 	ros::Publisher segments_pub;
 	ros::Publisher marker_pub;
 	ros::Publisher lable_pub;
@@ -28,12 +30,15 @@ private:
 	
 	tf::TransformListener listener;
 	laser_geometry::LaserProjection projector;
+	
+	nav_msgs::Odometry last_odom;
 
 public:
 	LaserpointSegmentation() {
   	
   	//sub = n.subscribe("/RosAria/urg_1_pointcloud", 100000, &LaserpointSegmentation::pointCloudCallback, this);
   	sub = n.subscribe("/RosAria/urg_1_laserscan", 100000, &LaserpointSegmentation::laserScanCallback, this);
+  	odom_sub = n.subscribe("/RosAria/pose", 1, &LaserpointSegmentation::odomCallback, this);
 	  		  	
   	segments_pub = n.advertise<laser_segmentation::PointCloudSegmented>("/pointcloud_segments",100000, true);
 		marker_pub = n.advertise<visualization_msgs::Marker>("/visualization_marker", 100000, true);
@@ -43,7 +48,10 @@ public:
 //*****************************************************************************************************************************************//
 //                         																SEGMENTATION                                                                     //
 //*****************************************************************************************************************************************//
-	  
+	
+	void odomCallback(const nav_msgs::Odometry odom) {
+		last_odom = odom;
+	}
 	  
 	  
 	void laserScanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_in) {
@@ -62,7 +70,8 @@ public:
 		//ROS_INFO("PointCloud: n:[%lu] ", boost::size(msg.points));	 
   	laser_segmentation::PointCloudSegmented segments_msg;
   	segments_msg.header = msg.header;	  	
-  
+  	segments_msg.odom = last_odom;
+  	
   	if(boost::size(msg.points)==0){
 			return;
 		}	

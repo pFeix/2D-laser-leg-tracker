@@ -37,8 +37,6 @@ TO DO:
 
  
 --------------------------------do after rest/segmentation-----------------------------------
-- if _n target == 2 chekc relationship and possibility -> only keep more viable
-
 -prevent target from get lost(segment error, oversegmentation) ? e.g. target gets not assignt because other object has only a bit lower cost -> priotize target (bad idea? because target gets assigned even if not true) ? (merge 2 canditate objects but only one meassure -> priotize)
 
 -------------------------------do afterclassification improvement----------------------------------------------------------
@@ -48,7 +46,7 @@ TO DO:
 --------------------------------do after rest-------------------------------------------------------------------
 -improve gating current > max_cost -> later > kalman predict area
 -limit velocity to reasonable value/ calculate better
--link no match cost to velocity and time not to distance
+-link no match cost to velocity/time not to distance
 
 */
 class SegmentTracking
@@ -91,9 +89,10 @@ private:
 	ros::Time last_time = ros::Time(0);
 	ros::Time last_time_backup = ros::Time::now();
 	
-	int id_count = 1;
-	tf::StampedTransform last_transform_stamp;
+	ros::Time last_time_laser = ros::Time(0);
 	
+	int id_count = 1;
+	tf::Transform last_transform;
 	
 	
 	
@@ -115,32 +114,40 @@ public:
 		object cost_calc_obj_2;
 		cost_calc_obj_1.pos.x = 1.0;
 		no_match_cost = calculate_cost(cost_calc_obj_1, cost_calc_obj_2); //calcuclate max cost for assignment by distance of dummy objects
+		ROS_INFO("no_match_cost: %f",no_match_cost);
 	}
 	
+	
+//*************************************************************************************************************//
+//																							callback loop																									 //
+//*************************************************************************************************************//
 
 	void pointCloudCallback(const laser_features::Featured_segments &msg)
-	{
+	{		
+		//************time calculation*********************************
 		auto time_1 = std::chrono::high_resolution_clock::now();
-		ros::Time current_time_backup = ros::Time::now();
-		double passed_time = (msg.header.stamp-last_time).toSec();
-		if(last_time == ros::Time(0))
-			passed_time = 0.0;
-		else if(passed_time <= 0.05 || passed_time > 2.0) {
-			passed_time = (current_time_backup-last_time_backup).toSec();
-		}
-		last_time = msg.header.stamp;
-		last_time_backup = current_time_backup;
-		ROS_INFO("stamp: %lf",msg.header.stamp.toSec());
+		ros::Time new_time_laser = msg.odom.header.stamp;
+		double passed_time = (new_time_laser-last_time_laser).toSec();
 		ROS_INFO("passed_time:%lf",passed_time);
+		last_time_laser = new_time_laser;
+
 		
-		
-		//---------------safe measured objects ---------------------------------
+		//************transform calculation*****************************
+		tf::Quaternion laser_frame_quat(msg.odom.pose.pose.orientation.x,msg.odom.pose.pose.orientation.y,msg.odom.pose.pose.orientation.z,msg.odom.pose.pose.orientation.w);
+		tf::Vector3 laser_frame_vec(msg.odom.pose.pose.position.x,msg.odom.pose.pose.position.y,msg.odom.pose.pose.position.z);
+		tf::Transform new_transform(laser_frame_quat, laser_frame_vec);
+		tf::Transform difference_transform = calculate_transform(new_transform,last_transform);
+	  
+	  last_transform = new_transform;
+	  
+			
+		//************safe measured objects*****************************
 		std::vector<object> measured_objects = meassure_objects(msg);
 		if(measured_objects.empty())
 			return;
 			
 			
-		// init() save all initial mesaurements into array
+		//************init() save all initial mesaurements into array***
 		if(known_objects.empty()) {
 			id_count = 1;
 			for(int i =0; i<measured_objects.size(); i++) {
@@ -149,69 +156,15 @@ public:
 				id_count++;				
 				known_objects.push_back(new_object);
 			}
-			mark_target(known_objects);
-		//update objects	
-		} else {
-			//ROS_INFO("n_objects: %i n_meassured: %i",known_objects.size(),measured_objects.size());
-			
-			vector <object> predicted_objects; //kown object predictet by last knewn state
+		//-------------------------------update objects	
+		} else {			
+			vector <object> predicted_objects; 							//kown object predictet by last knewn state
 			vector <object> new_objects; 										//new objects states
 			
-			tf::Transform difference_transform = calculate_transform();
+			predicted_objects = predict_objects(known_objects,passed_time); //not predicting
+			predicted_objects = apply_transform_change(predicted_objects, difference_transform);
 			
-			predicted_objects = predict_objects(known_objects,passed_time,difference_transform);
-			
-			
-			double cost = std::numeric_limits<double>::max();
-			int max_iter = predicted_objects.size();
-			vector< vector<double> > costMatrix;
-			vector<int> assignment;
-			
-			while(cost >= std::numeric_limits<double>::max() && max_iter > 0) {
-		
-				//calculate all costs
-				costMatrix.resize(0);
-				costMatrix.resize(predicted_objects.size());
-				//ROS_INFO("Cost Matrix: \n");
-				for(int i = 0; i < predicted_objects.size(); i++) {
-					for(int j = 0; j < measured_objects.size(); j++) {
-						double cost = calculate_cost(predicted_objects[i],measured_objects[j]);
-						if(cost < no_match_cost)
-							costMatrix[i].push_back(cost);
-						else
-							costMatrix[i].push_back(std::numeric_limits<double>::max());
-						//std::cout << costMatrix[i][j] << ",";
-					}
-					//std::cout << "\n";
-				}
-			
-				//find objects without reasonable cost and stall them
-				//stall_unassignable_objects(predicted_objects, costMatrix, new_objects,passed_time);
-			
-			
-				
-			
-
-				//find best assignment
-				assignment.resize(0);
-				cost = HungAlgo.Solve(costMatrix, assignment);
-				ROS_INFO("assignment cost: %lf", cost);
-				double recalculate_treshold = no_match_cost*assignment.size();
-				
-				if(cost >= recalculate_treshold) {
-					for(int i = 0; i<assignment.size();i++) {
-						if(assignment[i]>=0){ //ignore unasigned fields -> segmentation fault
-							if(costMatrix[i][assignment[i]] >= std::numeric_limits<double>::max()) {
-								stall_unassignable_object(predicted_objects, costMatrix, new_objects,passed_time,i);
-								//predicted_objects.erase(predicted_objects.begin()+i);
-								break; //break after staling because ranges changed -> segmentation fault possible
-							}
-						}
-					}
-				}
-				
-				max_iter--;
-			}
+			vector<int> assignment = find_best_assignment(predicted_objects, measured_objects, new_objects, passed_time);
 
 			
 			for(int i = 0; i<assignment.size(); i++) {
@@ -244,18 +197,22 @@ public:
 					
 			known_objects = new_objects;
 						
-			mark_target(known_objects);
+			
 				
-							
+			//--------------------------publish and visualize results-----------------------------------				
 			publish_target_pos(msg.header, known_objects);
 			visualize_target(known_objects, msg.header);
 			visualize_pred_way(msg.header, known_objects, passed_time);
 			visualize_ids(known_objects,msg.header);
 		}
+		
+		mark_target(known_objects);
+		
+		//**********************footer/execution time calculation**********************************************************
+		
 		auto time_2 = std::chrono::high_resolution_clock::now();
-		float execution_time = std::chrono::duration_cast<std::chrono::microseconds>(time_2 - time_1).count()/1000000.0;
-		//ROS_INFO("Execution time: %f",execution_time);//float e_t = execution_time.count();
-		//ROS_INFO("no_match_cost: %f",no_match_cost);
+		float execution_time = std::chrono::duration_cast<std::chrono::microseconds>(time_2 - time_1).count()/10e6;
+		ROS_INFO("Execution time: %f",execution_time);//float e_t = execution_time.count();
 	}
 	
 	
@@ -265,6 +222,58 @@ public:
 //****************************************************************************************************//	
 //-----------------------------HELPER-FUNCTIONS-------------------------------------------------------//
 //****************************************************************************************************//
+	
+	
+	
+	vector<int> find_best_assignment(vector<object>& predicted_objects, vector<object>& measured_objects, vector<object>& new_objects,const float passed_time) {
+		double cost = std::numeric_limits<double>::max();
+		int max_iter = predicted_objects.size();
+		vector< vector<double> > costMatrix;
+		vector<int> assignment;
+		
+		while(cost >= std::numeric_limits<double>::max() && max_iter > 0) {
+	
+			//calculate all costs
+			costMatrix.resize(0);
+			costMatrix.resize(predicted_objects.size());
+			//ROS_INFO("Cost Matrix: \n");
+			for(int i = 0; i < predicted_objects.size(); i++) {
+				for(int j = 0; j < measured_objects.size(); j++) {
+					double cost = calculate_cost(predicted_objects[i],measured_objects[j]);
+					if(cost < no_match_cost)
+						costMatrix[i].push_back(cost);
+					else
+						costMatrix[i].push_back(std::numeric_limits<double>::max());
+					//std::cout << costMatrix[i][j] << ",";
+				}
+				//std::cout << "\n";
+			}
+		
+			//find best assignment
+			assignment.resize(0);
+			cost = HungAlgo.Solve(costMatrix, assignment);
+			ROS_INFO("assignment cost: %lf", cost);
+			double recalculate_treshold = no_match_cost*assignment.size();
+			
+			if(cost >= recalculate_treshold) {
+				for(int i = 0; i<assignment.size();i++) {
+					if(assignment[i]>=0){ //ignore unasigned fields -> segmentation fault
+						if(costMatrix[i][assignment[i]] >= std::numeric_limits<double>::max()) {
+							stall_unassignable_object(predicted_objects, costMatrix, new_objects,passed_time,i);
+							//predicted_objects.erase(predicted_objects.begin()+i);
+							break; //break after staling because ranges changed -> segmentation fault possible
+						}
+					}
+				}
+			}
+			
+			max_iter--;
+		}
+		return (assignment);
+	}
+
+
+
 	void publish_target_pos(const std_msgs::Header header, const std::vector<object> known_objects) {
 		laser_segmentation::Target target_msg;
 		target_msg.header = header;
@@ -298,22 +307,6 @@ public:
 			target_pub.publish(target_msg);
 	}
 
-	void stall_unassignable_objects(std::vector<object>& known_objects, vector< vector<double> >& costMatrix, vector <object>& new_objects,const float passed_time)
-	{
-		for(int i = 0; i < costMatrix.size(); i++) {
-			bool has_match = false;
-			for(int j = 0; j < costMatrix[i].size(); j++) {
-				if(costMatrix[i][j] < no_match_cost) {
-					has_match = true;
-					break;
-				}					
-			}
-			if(!has_match) {
-				stall_unassignable_object(known_objects, costMatrix, new_objects, passed_time, i);
-				i--;
-			}
-		}
-	}
 	
 	void stall_unassignable_object(std::vector<object>& known_objects, vector< vector<double> >& costMatrix, vector <object>& new_objects,const float passed_time, int i)
 	{
@@ -484,27 +477,23 @@ public:
 		}
 	}
 	
-	tf::Transform calculate_transform(){
-			tf::StampedTransform transform_stamp = current_transform_stamp;
+	
+	tf::Transform calculate_transform(tf::Transform old_trans, tf::Transform new_trans){
 
-    	tf::Transform difference_transform;
-    	
-    	
-	    try{
-
-			  
-				tf::Matrix3x3 rotation_matrix = transform_stamp.getBasis().transpose() * last_transform_stamp.getBasis();
-				tf::Vector3 translation_vector = transform_stamp.getOrigin() - last_transform_stamp.getOrigin();
-				difference_transform = tf::Transform(rotation_matrix,translation_vector);
-				last_transform_stamp = transform_stamp;	
-			} 
-			catch (tf::TransformException ex)
-			{
-				ROS_ERROR("%s",ex.what());
-			}
-			
-			
-			return difference_transform;
+  	tf::Transform difference_transform; 	
+    try{
+			tf::Matrix3x3 rotation_matrix = new_trans.getBasis().transpose() * old_trans.getBasis();
+			tf::Vector3 translation_vector = new_trans.getOrigin() - old_trans.getOrigin();
+			difference_transform = tf::Transform(rotation_matrix,translation_vector);
+			//last_transform_stamp = transform_stamp;	
+		} 
+		catch (tf::TransformException ex)
+		{
+			ROS_ERROR("%s",ex.what());
+		}
+		
+		
+		return difference_transform;
 	}
 	
 	
@@ -562,17 +551,15 @@ public:
 	}
 	
 
-	vector<object> predict_objects(vector<object> known_object, float passed_time, tf::Transform difference_transform) {
+	vector<object> predict_objects(vector<object> known_object, float passed_time) {
 			vector<object> predicted_objects;
 		
 			for(int i = 0; i < known_objects.size(); i++) {
 				object predicted_obj = known_object[i];
-				//predicted_obj.pos = predict_position(predicted_obj.pos, predicted_obj.vel, passed_time);
+				predicted_obj.pos = predict_position(predicted_obj.pos, predicted_obj.vel, passed_time);
 				
 				predicted_objects.push_back(predicted_obj);
 			}
-			
-			predicted_objects = apply_transform_change(predicted_objects, difference_transform);
 	    
 			return predicted_objects;
 	}
@@ -721,6 +708,9 @@ public:
 	}
 };
 
+//********************************************************************************************************//
+//																									main																									//
+//********************************************************************************************************//
 
 int _kbhit() {
     static const int STDIN = 0;
