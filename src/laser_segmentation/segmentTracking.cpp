@@ -9,6 +9,7 @@
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <chrono>
+#include <queue> 
 
 
 #include <tf/transform_listener.h>
@@ -27,17 +28,18 @@
 TO DO:
 -to prevent assignment at any cost -> include meassure not available cost //study source again
 
--over max_cost_treshhold -> recaclulate assignment/use next best solution/set cost to infity/UPPER ONE
+-over max_cost_treshhold (curr recaclulate assignment )use next best solution/set cost to infity/UPPER ONE
 
 -increase frame pulish rate
 
 -track only legs
 
--add position prediction
 
  
 --------------------------------do after rest/segmentation-----------------------------------
--prevent target from get lost(segment error, oversegmentation) ? e.g. target gets not assignt because other object has only a bit lower cost -> priotize target (bad idea? because target gets assigned even if not true) ? (merge 2 canditate objects but only one meassure -> priotize)
+-prevent target from get lost e.g. target gets not assignt because other object has only a bit lower cost -> priotize target (bad idea? because target gets wrong assigned) -> solved throug tracking only target 
+
+-detect merge process -> dont assign 2nd canditate other wise -> stall/delete
 
 -------------------------------do afterclassification improvement----------------------------------------------------------
 -save propability over time and take middle
@@ -45,7 +47,7 @@ TO DO:
 
 --------------------------------do after rest-------------------------------------------------------------------
 -improve gating current > max_cost -> later > kalman predict area
--limit velocity to reasonable value/ calculate better
+-limit velocity to reasonable value/ calculate better fix bug !!!!!!!!!!!!!!!!!!!!!!!!!!
 -link no match cost to velocity/time not to distance
 
 */
@@ -68,6 +70,7 @@ private:
 		geometry_msgs::Point32 last_pos;
 		geometry_msgs::Point32 vel;
 		float propability;
+		std::queue<float> propability_history;
 		float distance;
 		bool is_target = false;
 		float last_seen = 0.0;
@@ -77,17 +80,15 @@ private:
 	};
 	std::vector<object> known_objects;
 	
-	float init_propability_treshold = 0.7;
-	float association_velocity_treshhold = 1.4; //in m/s
+	float target_propability_treshold = 0.7;
+	float tracking_propability_treshold = 0.5;
 	
 	float init_max_distance = 1.5;
-	float scan_max_distance = 1.0;
-	float delete_treshold = 5.0;
+	float legs_max_distance = 0.5;
+	float delete_treshold = 5.0; //in s
 		
 	float no_match_cost; 
 	
-	ros::Time last_time = ros::Time(0);
-	ros::Time last_time_backup = ros::Time::now();
 	
 	ros::Time last_time_laser = ros::Time(0);
 	
@@ -112,7 +113,7 @@ public:
 		
 		object cost_calc_obj_1;
 		object cost_calc_obj_2;
-		cost_calc_obj_1.pos.x = 1.0;
+		cost_calc_obj_1.pos.x = 0.75;
 		no_match_cost = calculate_cost(cost_calc_obj_1, cost_calc_obj_2); //calcuclate max cost for assignment by distance of dummy objects
 		ROS_INFO("no_match_cost: %f",no_match_cost);
 	}
@@ -151,24 +152,26 @@ public:
 		if(known_objects.empty()) {
 			id_count = 1;
 			for(int i =0; i<measured_objects.size(); i++) {
-				object new_object = measured_objects[i];
-				new_object.id = id_count;
-				id_count++;				
-				known_objects.push_back(new_object);
+				if(measured_objects[i].propability > tracking_propability_treshold) {
+					object new_object = measured_objects[i];
+					new_object.id = id_count;
+					id_count++;				
+					known_objects.push_back(new_object);
+				}
 			}
-		//-------------------------------update objects	
+		//************update objects	**********************************
 		} else {			
-			vector <object> predicted_objects; 							//kown object predictet by last knewn state
-			vector <object> new_objects; 										//new objects states
+			vector <object> predicted_objects; 	//kown object predictet by last knewn state
+			vector <object> new_objects; 				//new objects states
 			
-			predicted_objects = predict_objects(known_objects,passed_time); //not predicting
+			predicted_objects = known_objects;
+			predicted_objects = predict_objects(known_objects,passed_time); //currently not predicting
 			predicted_objects = apply_transform_change(predicted_objects, difference_transform);
-			
+			visualize_pred_way(msg.header, known_objects, predicted_objects);
 			vector<int> assignment = find_best_assignment(predicted_objects, measured_objects, new_objects, passed_time);
 
-			
+			//assign best guess to known objects
 			for(int i = 0; i<assignment.size(); i++) {
-				//assign best guess to known objects
 				if(assignment[i] >= 0) {
 					//ROS_INFO("assignment: %i -> %i cost: %lf",i,assignment[i],costMatrix[i][assignment[i]]);
 					object new_object = measured_objects[assignment[i]];
@@ -178,16 +181,20 @@ public:
 					new_object.is_target = predicted_objects[i].is_target;
 					new_object.vel = update_velocity(known_objects[i], new_object, passed_time, difference_transform); //attentoN!!!!!!!!!!!!!!!!
 					new_object.last_pos_change = calculate_2_point_distance(new_object.pos,known_objects[i].pos);
-					new_objects.push_back(new_object);
+					if(new_object.is_target || new_object.propability > tracking_propability_treshold) {
+						new_objects.push_back(new_object);
+					}
 				}
 				else {
-					stall_object(new_objects,predicted_objects[i],passed_time);			
+					if(predicted_objects[i].is_target || predicted_objects[i].propability > tracking_propability_treshold) {
+						stall_object(new_objects,predicted_objects[i],passed_time);	
+					}		
 				}
 			}
 					
 			//if no suitable object for meassurements are found create new objects
 			for(int i = 0; i<measured_objects.size(); i++) {
-				if(measured_objects[i].assigned == false) {
+				if(measured_objects[i].assigned == false && measured_objects[i].propability > tracking_propability_treshold) {
 					measured_objects[i].assigned = true;
 					measured_objects[i].id = id_count;
 					id_count++;
@@ -202,7 +209,6 @@ public:
 			//--------------------------publish and visualize results-----------------------------------				
 			publish_target_pos(msg.header, known_objects);
 			visualize_target(known_objects, msg.header);
-			visualize_pred_way(msg.header, known_objects, passed_time);
 			visualize_ids(known_objects,msg.header);
 		}
 		
@@ -212,7 +218,7 @@ public:
 		
 		auto time_2 = std::chrono::high_resolution_clock::now();
 		float execution_time = std::chrono::duration_cast<std::chrono::microseconds>(time_2 - time_1).count()/10e6;
-		ROS_INFO("Execution time: %f",execution_time);//float e_t = execution_time.count();
+		//ROS_INFO("Execution time: %f",execution_time);//float e_t = execution_time.count();
 	}
 	
 	
@@ -311,7 +317,7 @@ public:
 	void stall_unassignable_object(std::vector<object>& known_objects, vector< vector<double> >& costMatrix, vector <object>& new_objects,const float passed_time, int i)
 	{
 		costMatrix.erase(costMatrix.begin()+i);
-		stall_object(new_objects,known_objects[i],30.0);
+		stall_object(new_objects,known_objects[i],passed_time);
 		known_objects.erase(known_objects.begin()+i);
 	}
 
@@ -336,7 +342,7 @@ public:
 	{
 		object new_object = old_object;
 		new_object.last_seen += passed_time;
-		if(new_object.last_seen < delete_treshold && new_object.is_target == true) {
+		if(new_object.last_seen < delete_treshold) {
 			new_object.vel.x = 0.0;//new_object.vel.x/2;
 			new_object.vel.y = 0.0;//new_object.vel.y/2;
 			new_object.vel.z = 0.0;//new_object.vel.z/2;
@@ -391,7 +397,7 @@ public:
 			object * best_object = &dummy_object;
 	
 			for(int i =0; i<known_objects.size(); i++) {
-				if(known_objects[i].propability >= init_propability_treshold && known_objects[i].distance < best_object->distance) 
+				if(known_objects[i].propability >= target_propability_treshold && known_objects[i].distance < best_object->distance) 
 				{
 					best_object = &known_objects[i];
 				}					
@@ -414,7 +420,7 @@ public:
 			}
 			object * nearest_neighbour_object = find_nearest_neighbour(known_objects,*target_object);//cant use nearest neigbour id attribute because may be out of date or object list may be changed
 			float distance = calculate_2_point_distance(target_object->pos,nearest_neighbour_object->pos);
-			if(nearest_neighbour_object->propability > 0.5 && distance < 0.5) {
+			if(nearest_neighbour_object->propability > tracking_propability_treshold && distance < legs_max_distance) {
 			 nearest_neighbour_object->is_target = true;
 			 n_target_found = 2;
 			}
@@ -438,7 +444,7 @@ public:
 			
 			float distance = calculate_2_point_distance(known_objects[id_target_1].pos,known_objects[id_target_2].pos);
 			ROS_INFO("2 target distance: %f",distance);
-			if(distance >= 0.5) {
+			if(distance >= legs_max_distance) {
 				if(known_objects[id_target_1].last_pos_change > known_objects[id_target_2].last_pos_change) {
 					known_objects[id_target_1].is_target = false;
 				} else {
@@ -481,17 +487,9 @@ public:
 	tf::Transform calculate_transform(tf::Transform old_trans, tf::Transform new_trans){
 
   	tf::Transform difference_transform; 	
-    try{
-			tf::Matrix3x3 rotation_matrix = new_trans.getBasis().transpose() * old_trans.getBasis();
-			tf::Vector3 translation_vector = new_trans.getOrigin() - old_trans.getOrigin();
-			difference_transform = tf::Transform(rotation_matrix,translation_vector);
-			//last_transform_stamp = transform_stamp;	
-		} 
-		catch (tf::TransformException ex)
-		{
-			ROS_ERROR("%s",ex.what());
-		}
-		
+		tf::Matrix3x3 rotation_matrix = new_trans.getBasis().transpose() * old_trans.getBasis();
+		tf::Vector3 translation_vector = new_trans.getOrigin() - old_trans.getOrigin();
+		difference_transform = tf::Transform(rotation_matrix,translation_vector);
 		
 		return difference_transform;
 	}
@@ -551,16 +549,10 @@ public:
 	}
 	
 
-	vector<object> predict_objects(vector<object> known_object, float passed_time) {
-			vector<object> predicted_objects;
-		
+	vector<object> predict_objects(vector<object> predicted_objects, const float passed_time) {
 			for(int i = 0; i < known_objects.size(); i++) {
-				object predicted_obj = known_object[i];
-				predicted_obj.pos = predict_position(predicted_obj.pos, predicted_obj.vel, passed_time);
-				
-				predicted_objects.push_back(predicted_obj);
+				predicted_objects[i].pos = predict_position(predicted_objects[i].pos, predicted_objects[i].vel, passed_time);
 			}
-	    
 			return predicted_objects;
 	}
 	
@@ -575,8 +567,11 @@ public:
 		return sqrt(pow(A.x-B.x,2.0)+pow(A.y-B.y,2.0)+pow(A.z-B.z,2.0));
 	}
 		
-	
-////-----------------------------------------------VISUALIZATION!!!------------------------------------------------------------------------------------------------------------------------------
+		
+//*************************************************************************************************************//
+//																							VISUALIZATION																									 //
+//*************************************************************************************************************//
+
 	void visualize_ids(const std::vector<object> known_objects, const std_msgs::Header header) {
 		visualization_msgs::MarkerArray id_text_array;
 		visualization_msgs::Marker id_text;
@@ -658,7 +653,7 @@ public:
 		//ROS_INFO("target visualization published");
 	}
 	
-	void visualize_pred_way(std_msgs::Header header,const std::vector<object> known_objects, float passed_time) {
+	void visualize_pred_way(std_msgs::Header header,const std::vector<object> known_objects, const std::vector<object> predicted_objects) {
 		
 		visualization_msgs::MarkerArray pred_way_arrow_array;
 		visualization_msgs::Marker del_arrow;
@@ -669,7 +664,7 @@ public:
 		
 		
 		for(int i = 0; i<known_objects.size(); i++) {
-			if(known_objects[i].is_target) {
+			//if(known_objects[i].is_target) {
 				visualization_msgs::Marker pred_way_arrow;
 				pred_way_arrow.header = header;
 				pred_way_arrow.ns = "pred_way";
@@ -685,9 +680,9 @@ public:
 				pred_way_arrow_start.y = known_objects[i].pos.y;
 				pred_way_arrow_start.z = known_objects[i].pos.z;
 		
-				pred_way_arrow_end.x = known_objects[i].pos.x + known_objects[i].vel.x*passed_time;
-				pred_way_arrow_end.y = known_objects[i].pos.y + known_objects[i].vel.y*passed_time;
-				pred_way_arrow_end.z = known_objects[i].pos.z + known_objects[i].vel.z*passed_time;
+				pred_way_arrow_end.x = predicted_objects[i].pos.x;
+				pred_way_arrow_end.y = predicted_objects[i].pos.y;
+				pred_way_arrow_end.z = predicted_objects[i].pos.z;
 				pred_way_arrow.points.push_back(pred_way_arrow_start);
 				pred_way_arrow.points.push_back(pred_way_arrow_end);
 		
@@ -701,7 +696,7 @@ public:
 				pred_way_arrow.color.g = 1.0;
 				pred_way_arrow.color.b = 1.0;
 				pred_way_arrow_array.markers.push_back(pred_way_arrow);
-			}
+			//}
 		}
 		
 		pred_way_pub.publish(pred_way_arrow_array);
@@ -747,22 +742,7 @@ int main(int argc, char **argv)
 			int c = getchar();
   		if (c == 'r' || c == 'R')
   			STObject.reset_target();
-  	}
-  	
-  	try 
-  	{
-			tf::TransformListener listener;
-			listener.waitForTransform("/base_link", "/odom", ros::Time(0), ros::Duration(0.5));
-			listener.lookupTransform("/base_link", "/odom", ros::Time(0), STObject.current_transform_stamp);
-		} 
-		catch (tf::TransformException ex)
-		{
-			ROS_ERROR("%s",ex.what());
-		}
-  	
-  	
-  	
-  	
+  	} 	
 		ros::spinOnce();
 		r.sleep();
 	}
