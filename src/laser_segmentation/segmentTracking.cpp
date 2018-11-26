@@ -69,7 +69,6 @@ private:
 		geometry_msgs::Point32 pos;
 		geometry_msgs::Point32 last_pos;
 		geometry_msgs::Point32 vel;
-		float propability;
 		std::queue<float> propability_history;
 		float distance;
 		bool is_target = false;
@@ -113,7 +112,7 @@ public:
 		
 		object cost_calc_obj_1;
 		object cost_calc_obj_2;
-		cost_calc_obj_1.pos.x = 0.75;
+		cost_calc_obj_1.pos.x = 1;
 		no_match_cost = calculate_cost(cost_calc_obj_1, cost_calc_obj_2); //calcuclate max cost for assignment by distance of dummy objects
 		ROS_INFO("no_match_cost: %f",no_match_cost);
 	}
@@ -152,7 +151,7 @@ public:
 		if(known_objects.empty()) {
 			id_count = 1;
 			for(int i =0; i<measured_objects.size(); i++) {
-				if(measured_objects[i].propability > tracking_propability_treshold) {
+				if(measured_objects[i].propability_history.back() > tracking_propability_treshold) {
 					object new_object = measured_objects[i];
 					new_object.id = id_count;
 					id_count++;				
@@ -174,19 +173,21 @@ public:
 			for(int i = 0; i<assignment.size(); i++) {
 				if(assignment[i] >= 0) {
 					//ROS_INFO("assignment: %i -> %i cost: %lf",i,assignment[i],costMatrix[i][assignment[i]]);
-					object new_object = measured_objects[assignment[i]];
 					measured_objects[assignment[i]].assigned = true;
+					object new_object = measured_objects[assignment[i]];
+					new_object.propability_history.swap(predicted_objects[i].propability_history);
+					new_object.propability_history.push(predicted_objects[i].propability_history.front());
 					
 					new_object.id = predicted_objects[i].id;
 					new_object.is_target = predicted_objects[i].is_target;
 					new_object.vel = update_velocity(known_objects[i], new_object, passed_time, difference_transform); //attentoN!!!!!!!!!!!!!!!!
 					new_object.last_pos_change = calculate_2_point_distance(new_object.pos,known_objects[i].pos);
-					if(new_object.is_target || new_object.propability > tracking_propability_treshold) {
+					if(is_leg(new_object)) {
 						new_objects.push_back(new_object);
 					}
 				}
 				else {
-					if(predicted_objects[i].is_target || predicted_objects[i].propability > tracking_propability_treshold) {
+					if(is_leg(predicted_objects[i])) {
 						stall_object(new_objects,predicted_objects[i],passed_time);	
 					}		
 				}
@@ -194,7 +195,7 @@ public:
 					
 			//if no suitable object for meassurements are found create new objects
 			for(int i = 0; i<measured_objects.size(); i++) {
-				if(measured_objects[i].assigned == false && measured_objects[i].propability > tracking_propability_treshold) {
+				if(measured_objects[i].assigned == false && measured_objects[i].propability_history.back() > tracking_propability_treshold) {
 					measured_objects[i].assigned = true;
 					measured_objects[i].id = id_count;
 					id_count++;
@@ -229,52 +230,63 @@ public:
 //-----------------------------HELPER-FUNCTIONS-------------------------------------------------------//
 //****************************************************************************************************//
 	
+	bool is_leg(object obj) {
+		if(obj.is_target || propability_average(obj.propability_history) > tracking_propability_treshold || propability_max(obj.propability_history) > target_propability_treshold) {
+			return true;
+		} else {
+	 		return false;
+		}
+	
+	}
+	
+	float propability_max(std::queue<float> propability_history) {
+		float max = 0.0;
+		while(!propability_history.empty()) {
+			if(propability_history.front()>max)
+			 max = propability_history.front();
+			propability_history.pop();
+		}
+		return max;		
+	}
+	
+	float propability_average(std::queue<float> propability_history) {
+		float average = 0.0;
+		int count = propability_history.size();
+		while(!propability_history.empty()) {
+			average += propability_history.front()/count;
+			propability_history.pop();
+		}
+		return average;
+	}
 	
 	
 	vector<int> find_best_assignment(vector<object>& predicted_objects, vector<object>& measured_objects, vector<object>& new_objects,const float passed_time) {
-		double cost = std::numeric_limits<double>::max();
-		int max_iter = predicted_objects.size();
 		vector< vector<double> > costMatrix;
 		vector<int> assignment;
-		
-		while(cost >= std::numeric_limits<double>::max() && max_iter > 0) {
-	
-			//calculate all costs
-			costMatrix.resize(0);
-			costMatrix.resize(predicted_objects.size());
-			//ROS_INFO("Cost Matrix: \n");
-			for(int i = 0; i < predicted_objects.size(); i++) {
-				for(int j = 0; j < measured_objects.size(); j++) {
-					double cost = calculate_cost(predicted_objects[i],measured_objects[j]);
-					if(cost < no_match_cost)
-						costMatrix[i].push_back(cost);
-					else
-						costMatrix[i].push_back(std::numeric_limits<double>::max());
-					//std::cout << costMatrix[i][j] << ",";
-				}
-				//std::cout << "\n";
+
+		//calculate all costs
+		costMatrix.resize(predicted_objects.size());
+		//ROS_INFO("Cost Matrix: \n");
+		for(int i = 0; i < predicted_objects.size(); i++) {
+			for(int j = 0; j < measured_objects.size(); j++) {
+				double cost = calculate_cost(predicted_objects[i],measured_objects[j]);
+				costMatrix[i].push_back(cost);
+				//std::cout << costMatrix[i][j] << ",";
 			}
-		
-			//find best assignment
-			assignment.resize(0);
-			cost = HungAlgo.Solve(costMatrix, assignment);
-			ROS_INFO("assignment cost: %lf", cost);
-			double recalculate_treshold = no_match_cost*assignment.size();
-			
-			if(cost >= recalculate_treshold) {
-				for(int i = 0; i<assignment.size();i++) {
-					if(assignment[i]>=0){ //ignore unasigned fields -> segmentation fault
-						if(costMatrix[i][assignment[i]] >= std::numeric_limits<double>::max()) {
-							stall_unassignable_object(predicted_objects, costMatrix, new_objects,passed_time,i);
-							//predicted_objects.erase(predicted_objects.begin()+i);
-							break; //break after staling because ranges changed -> segmentation fault possible
-						}
-					}
-				}
-			}
-			
-			max_iter--;
+			//std::cout << "\n";
 		}
+	
+		//solve linear assignment problem
+		double cost = HungAlgo.Solve(costMatrix, assignment);
+		ROS_INFO("assignment cost: %lf", cost);
+
+		//unassign if over treshold
+		for(int i = 0; i<assignment.size();i++) {
+			if(costMatrix[i][assignment[i]] >= no_match_cost) {
+				assignment[i] = -1;
+			}
+		}
+			
 		return (assignment);
 	}
 
@@ -314,13 +326,6 @@ public:
 	}
 
 	
-	void stall_unassignable_object(std::vector<object>& known_objects, vector< vector<double> >& costMatrix, vector <object>& new_objects,const float passed_time, int i)
-	{
-		costMatrix.erase(costMatrix.begin()+i);
-		stall_object(new_objects,known_objects[i],passed_time);
-		known_objects.erase(known_objects.begin()+i);
-	}
-
 	std::vector<object> meassure_objects(const laser_features::Featured_segments &msg)
 	{
 		std::vector<object> measured_objects;
@@ -330,7 +335,7 @@ public:
 			new_measurement.pos = segment.center;
 			geometry_msgs::Point32 zero_vel; zero_vel.x = 0; zero_vel.y = 0; zero_vel.z = 0;
 			new_measurement.vel = zero_vel;
-			new_measurement.propability = segment.class_id;
+			new_measurement.propability_history.push(segment.class_id);
 			new_measurement.distance = segment.distance_to_origin;
 			measured_objects.push_back(new_measurement);
 		}
@@ -381,7 +386,9 @@ public:
 
 	void mark_target(std::vector<object>& known_objects) {
 		int n_target_found = 0;
-
+		ROS_INFO("n_objects %lu",known_objects.size());
+		if(known_objects.size() == 0)
+			return;
 		
 		for(int i = 0; i<known_objects.size(); i++) {
 			if(known_objects[i].is_target == true) {
@@ -395,14 +402,16 @@ public:
 			object dummy_object;
 			dummy_object.distance = std::numeric_limits<float>::infinity();
 			object * best_object = &dummy_object;
-	
+			
 			for(int i =0; i<known_objects.size(); i++) {
-				if(known_objects[i].propability >= target_propability_treshold && known_objects[i].distance < best_object->distance) 
+				if(propability_max(known_objects[i].propability_history) >= target_propability_treshold && known_objects[i].distance < best_object->distance) 
 				{
 					best_object = &known_objects[i];
 				}					
 			}
-			ROS_INFO("Searching for target... best object distance: %f propability: %f",best_object->distance,best_object->propability);
+			if(best_object == &dummy_object)
+				return;
+			ROS_INFO("Searching for target... best object distance: %f propability: %f",best_object->distance,best_object->propability_history.back());
 	
 			if(best_object->distance < init_max_distance) {
 				best_object->is_target = true;
@@ -420,7 +429,7 @@ public:
 			}
 			object * nearest_neighbour_object = find_nearest_neighbour(known_objects,*target_object);//cant use nearest neigbour id attribute because may be out of date or object list may be changed
 			float distance = calculate_2_point_distance(target_object->pos,nearest_neighbour_object->pos);
-			if(nearest_neighbour_object->propability > tracking_propability_treshold && distance < legs_max_distance) {
+			if(propability_max(nearest_neighbour_object->propability_history) > tracking_propability_treshold && distance < legs_max_distance) {
 			 nearest_neighbour_object->is_target = true;
 			 n_target_found = 2;
 			}
@@ -454,7 +463,13 @@ public:
 			//check targets -> nn_relationship
 		}
 		
-		
+		n_target_found = 0;
+		for(int i = 0; i<known_objects.size(); i++) {
+			if(known_objects[i].is_target == true) {
+				n_target_found += 1;
+			}
+		}
+		ROS_INFO("n_target after: %i",n_target_found);
 		
 		
 	}
