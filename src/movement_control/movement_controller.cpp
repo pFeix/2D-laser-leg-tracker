@@ -48,17 +48,25 @@ public:
 				passed_time = 0.0;
 			last_time = target_msg.header.stamp;
 			//ROS_INFO("passed_time: %f",passed_time);
+	
+			//calculate angle
+			float slope = target_msg.pos.y / target_msg.pos.x;
+			float angle = atan(slope);
 			
-			vel_msg.angular.z = pid_controller(angular_target_offset, target_msg.pos.y, passed_time, max_angular_speed, min_angular_speed);
+			ROS_INFO("angle: %f",angle);
 			
-			//if(target_msg.pos.y > 0.2)
-			//	vel_msg.angular.z = 0.5; // turn left
-			//else if(target_msg.pos.y < -0.2)
-			//	vel_msg.angular.z = -0.5; // turn right
+	
+			
+			vel_msg.angular.z = pid_controller(angular_target_offset, angle, passed_time, max_angular_speed, min_angular_speed);
 			
 			
-			if(abs(target_msg.pos.y)<0.1 && target_msg.pos.x > 0.75)
-				vel_msg.linear.x = 0.25; // move to target
+			
+			if(abs(angle)<0.2 && target_msg.pos.x > 1.0)
+				vel_msg.linear.x = 0.4; // move to target
+			else if(abs(angle)<0.4 && target_msg.pos.x > 1.0)
+				vel_msg.linear.x = 0.2; // move to target slow
+			else
+				vel_msg.linear.x = 0.0;
 				
 			publish_vel(vel_msg);
 		}
@@ -98,7 +106,7 @@ public:
 		vel_pub.publish(vel_msg);
   }
   
-  float k_p = 0.75;
+  float k_p = 1.0;
 	float k_d = 0.25;
 	float k_i = 0.0;
 	float PID_integral = 0.0;
@@ -179,31 +187,32 @@ int main(int argc, char **argv)
 
 			int c = getchar();   // call your non-blocking input function
 			if (c == 'w'){
-		  	vel_msg.linear.x = 0.1;					//ROS_INFO( "W");
+		  	vel_msg.linear.x = 0.2;					//ROS_INFO( "W");
 		  	KCObject.publish_vel(vel_msg);
 	  	}
 			else if (c == 'a') {
-		  	vel_msg.angular.z = 0.5;				//ROS_INFO( "A");
+		  	vel_msg.angular.z = 1.0;				//ROS_INFO( "A");
 		  	KCObject.publish_vel(vel_msg);
 	  	}
 			else if (c == 's'){
-		  	vel_msg.linear.x = -0.1;					//ROS_INFO( "S");
+		  	vel_msg.linear.x = -0.2;					//ROS_INFO( "S");
 	  		KCObject.publish_vel(vel_msg);
 	  	}
 			else if (c == 'd') {
-		  	vel_msg.angular.z = -0.5;				//ROS_INFO( "D");
+		  	vel_msg.angular.z = -1.0;				//ROS_INFO( "D");
 		  	KCObject.publish_vel(vel_msg);
 	  	}
 			else if (c == 'x') {
-		  	vel_msg.angular.z = 0.0;		//ROS_INFO( "X");
-		  	vel_msg.linear.x = 0;
+
 		  	KCObject.publish_vel(vel_msg);	
 	  	}		
 			else if (c == 'l')
 				KCObject.follow_target = !KCObject.follow_target;
-	  	else
+	  	else {
+		  	vel_msg.angular.z = 0.0;		//ROS_INFO( "X");
+		  	vel_msg.linear.x = 0;
 				KCObject.follow_target = false;
-				
+			}
 			
 		}
 		ros::Rate r(1000);

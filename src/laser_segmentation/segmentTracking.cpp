@@ -9,7 +9,10 @@
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <chrono>
-#include <queue> 
+#include <queue>
+ 
+#include <Eigen/Dense>
+#include "kalman-cpp/kalman.hpp"
 
 
 #include <tf/transform_listener.h>
@@ -28,21 +31,16 @@
 TO DO:
 -to prevent assignment at any cost -> include meassure not available cost //study source again
 
--over max_cost_treshhold (curr recaclulate assignment )use next best solution/set cost to infity/UPPER ONE
+-over max_cost_treshhold (curr deassign )  cost to high not infinity/UPPER ONE
 
 -increase frame pulish rate
 
--track only legs
-
-
  
 --------------------------------do after rest/segmentation-----------------------------------
--prevent target from get lost e.g. target gets not assignt because other object has only a bit lower cost -> priotize target (bad idea? because target gets wrong assigned) -> solved throug tracking only target 
 
 -detect merge process -> dont assign 2nd canditate other wise -> stall/delete
 
 -------------------------------do afterclassification improvement----------------------------------------------------------
--save propability over time and take middle
 -improve cost_function -> appearance/propability(better classifier needed)
 
 --------------------------------do after rest-------------------------------------------------------------------
@@ -164,7 +162,7 @@ public:
 			vector <object> new_objects; 				//new objects states
 			
 			predicted_objects = known_objects;
-			predicted_objects = predict_objects(known_objects,passed_time); //currently not predicting
+			//predicted_objects = predict_objects(known_objects,passed_time);
 			predicted_objects = apply_transform_change(predicted_objects, difference_transform);
 			visualize_pred_way(msg.header, known_objects, predicted_objects);
 			vector<int> assignment = find_best_assignment(predicted_objects, measured_objects, new_objects, passed_time);
@@ -175,7 +173,7 @@ public:
 					//ROS_INFO("assignment: %i -> %i cost: %lf",i,assignment[i],costMatrix[i][assignment[i]]);
 					measured_objects[assignment[i]].assigned = true;
 					object new_object = measured_objects[assignment[i]];
-					new_object.propability_history.swap(predicted_objects[i].propability_history);
+					new_object.propability_history.swap(predicted_objects[i].propability_history); //swap before appending to be in correct sequence
 					new_object.propability_history.push(predicted_objects[i].propability_history.front());
 					
 					new_object.id = predicted_objects[i].id;
@@ -229,6 +227,40 @@ public:
 //****************************************************************************************************//	
 //-----------------------------HELPER-FUNCTIONS-------------------------------------------------------//
 //****************************************************************************************************//
+	void init_kallman(object new_object, float passed_time) {
+	 	int n = 4; // Number of states
+		int m = 4; // Number of measurements
+
+		double dt = passed_time; // Time step
+
+		Eigen::MatrixXd A(n, n); // System dynamics matrix
+		Eigen::MatrixXd C(m, n); // Output matrix
+		Eigen::MatrixXd Q(n, n); // Process noise covariance
+		Eigen::MatrixXd R(m, m); // Measurement noise covariance
+		Eigen::MatrixXd P(n, n); // Estimate error covariance
+		
+		
+		// Discrete LTI projectile motion, measuring position only
+		A << 1, 0, dt, 0, 0, 1, 0, dt, 0, 0, 1, 0, 0, 0, 0, 1;
+		C << pow(dt,2.0)/2 , 0, 0, pow(dt,2.0)/2, dt, 0, 0, dt;
+
+		// Reasonable covariance matrices
+		Q << .05, .05, .0, .05, .05, .0, .0, .0, .0;
+		R << 5;
+		P << .1, .1, .1, .1, 10000, 10, .1, 10, 100;
+	
+		 // Construct the filter
+		//KalmanFilter kf(A, C, Q, R, P);
+	
+	
+		// Best guess of initial states
+		//Eigen::VectorXd x0(n);
+		//x0 << new_object.pos.x, new_object.pos.y, 0, 0;
+		//kf.init(x0);
+	
+	}
+	
+	
 	
 	bool is_leg(object obj) {
 		if(obj.is_target || propability_average(obj.propability_history) > tracking_propability_treshold || propability_max(obj.propability_history) > target_propability_treshold) {
@@ -236,7 +268,6 @@ public:
 		} else {
 	 		return false;
 		}
-	
 	}
 	
 	float propability_max(std::queue<float> propability_history) {
@@ -297,12 +328,11 @@ public:
 		target_msg.header = header;
 		target_msg.last_seen = -1.0;
 				
-		object target;
 		int n_target_found = 0;
 		for(int i = 0; i<known_objects.size(); i++) {
 			if(known_objects[i].is_target && known_objects[i].last_seen == 0.0) {
 				n_target_found += 1;
-				target = known_objects[i];
+				object target = known_objects[i];
 				target_msg.pos.x += target.pos.x;
 				target_msg.pos.y += target.pos.y;
 				target_msg.pos.z += target.pos.z;
@@ -314,15 +344,16 @@ public:
 					target_msg.last_seen = target.last_seen;
 			}
 		}
-		target_msg.pos.x = target_msg.pos.x/n_target_found;
-		target_msg.pos.y = target_msg.pos.y/n_target_found;
-		target_msg.pos.z = target_msg.pos.z/n_target_found;
-		target_msg.vel.x = target_msg.vel.x/n_target_found;
-		target_msg.vel.y = target_msg.vel.y/n_target_found;
-		target_msg.vel.z = target_msg.vel.z/n_target_found;
 		
-		if(n_target_found > 0)
+		if(n_target_found > 0) {
+			target_msg.pos.x = target_msg.pos.x/n_target_found;
+			target_msg.pos.y = target_msg.pos.y/n_target_found;
+			target_msg.pos.z = target_msg.pos.z/n_target_found;
+			target_msg.vel.x = target_msg.vel.x/n_target_found;
+			target_msg.vel.y = target_msg.vel.y/n_target_found;
+			target_msg.vel.z = target_msg.vel.z/n_target_found;
 			target_pub.publish(target_msg);
+		}
 	}
 
 	
@@ -375,9 +406,9 @@ public:
 		old_obj.pos = apply_translation_change(old_obj.pos, transform.getOrigin());
 				
 		geometry_msgs::Point32 vel;
-		vel.x = (new_obj.pos.x - old_obj.pos.x)/passed_time/3;
-		vel.y = (new_obj.pos.y - old_obj.pos.y)/passed_time/3;
-		vel.z = (new_obj.pos.z - old_obj.pos.z)/passed_time/3;
+		vel.x = (new_obj.pos.x - old_obj.pos.x)/passed_time/2;
+		vel.y = (new_obj.pos.y - old_obj.pos.y)/passed_time/2;
+		vel.z = (new_obj.pos.z - old_obj.pos.z)/passed_time/2;
 		
 		
 		//ROS_INFO("vel: (%f,%f), old_pos: (%f,%f), new_pos: (%f,%f), passed_time: %f",vel.x, vel.y, old_obj.pos.x, old_obj.pos.y, new_obj.pos.x, new_obj.pos.y, passed_time);
@@ -426,15 +457,16 @@ public:
 					target_object = &known_objects[i];
 					break;
 				}
-			}
+			}		
 			object * nearest_neighbour_object = find_nearest_neighbour(known_objects,*target_object);//cant use nearest neigbour id attribute because may be out of date or object list may be changed
+			if(!nearest_neighbour_object)
+				return;
 			float distance = calculate_2_point_distance(target_object->pos,nearest_neighbour_object->pos);
 			if(propability_max(nearest_neighbour_object->propability_history) > tracking_propability_treshold && distance < legs_max_distance) {
 			 nearest_neighbour_object->is_target = true;
-			 n_target_found = 2;
+			 n_target_found = 2; 	
 			}
 		}
-		
 		if(n_target_found ==2) {
 			int n_target_found = 0;
 			int id_target_1 = -1;
@@ -462,16 +494,6 @@ public:
 			}
 			//check targets -> nn_relationship
 		}
-		
-		n_target_found = 0;
-		for(int i = 0; i<known_objects.size(); i++) {
-			if(known_objects[i].is_target == true) {
-				n_target_found += 1;
-			}
-		}
-		ROS_INFO("n_target after: %i",n_target_found);
-		
-		
 	}
 	
 	object * find_nearest_neighbour(std::vector<object>& known_objects, object& target_object) {
@@ -487,7 +509,10 @@ public:
 				nearest_neighbour_object = &known_objects[i];
 			}
 		}
-		return nearest_neighbour_object;
+		if(nearest_neighbour_object == &dummy_object)
+			return NULL;
+		else
+			return nearest_neighbour_object;
 	}
 	
 	void reset_target() {
@@ -588,6 +613,9 @@ public:
 //*************************************************************************************************************//
 
 	void visualize_ids(const std::vector<object> known_objects, const std_msgs::Header header) {
+		if(known_objects.empty())
+			return;
+	
 		visualization_msgs::MarkerArray id_text_array;
 		visualization_msgs::Marker id_text;
 		id_text.header = header;
@@ -624,13 +652,16 @@ public:
 	
 	void visualize_target(const std::vector<object> known_objects, const std_msgs::Header header) {
 		//ROS_INFO("visualizing....  ");
+		if(known_objects.empty())
+			return;
+		
 		visualization_msgs::MarkerArray target_arrow_array;
 		visualization_msgs::Marker del_arrow;
 		del_arrow.header = header;
 		del_arrow.action= del_arrow.DELETEALL;
 		target_arrow_array.markers.push_back(del_arrow);
 		target_marker_pub.publish(target_arrow_array);
-		
+		target_arrow_array.markers.clear();
 		
 		for(int i = 0; i<known_objects.size(); i++) {
 			if(known_objects[i].is_target) {
