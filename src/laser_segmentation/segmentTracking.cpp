@@ -73,12 +73,13 @@ private:
 		float last_seen = 0.0;
 		bool assigned = false;
 		float last_pos_change = 0.0;
-		
+		KalmanFilter kf;
+		float time_alive;
 	};
 	std::vector<object> known_objects;
 	
-	float target_propability_treshold = 0.7;
-	float tracking_propability_treshold = 0.5;
+	float target_propability_treshold = 0.9;
+	float tracking_propability_treshold = 0.7;
 	
 	float init_max_distance = 1.5;
 	float legs_max_distance = 0.5;
@@ -126,6 +127,10 @@ public:
 		auto time_1 = std::chrono::high_resolution_clock::now();
 		ros::Time new_time_laser = msg.odom.header.stamp;
 		double passed_time = (new_time_laser-last_time_laser).toSec();
+		if(last_time_laser == ros::Time(0))
+			passed_time = 0.0;
+		
+		
 		ROS_INFO("passed_time:%lf",passed_time);
 		last_time_laser = new_time_laser;
 
@@ -153,6 +158,7 @@ public:
 					object new_object = measured_objects[i];
 					new_object.id = id_count;
 					id_count++;				
+					new_object.kf = init_kalman(new_object, passed_time);
 					known_objects.push_back(new_object);
 				}
 			}
@@ -162,14 +168,13 @@ public:
 			vector <object> new_objects; 				//new objects states
 			
 			predicted_objects = known_objects;
-			//predicted_objects = predict_objects(known_objects,passed_time);
+			predicted_objects = predict_objects(known_objects,passed_time);
 			predicted_objects = apply_transform_change(predicted_objects, difference_transform);
-			visualize_pred_way(msg.header, known_objects, predicted_objects);
 			vector<int> assignment = find_best_assignment(predicted_objects, measured_objects, new_objects, passed_time);
 
 			//assign best guess to known objects
 			for(int i = 0; i<assignment.size(); i++) {
-				if(assignment[i] >= 0) {
+				if(assignment[i] >= 0) { //init func block
 					//ROS_INFO("assignment: %i -> %i cost: %lf",i,assignment[i],costMatrix[i][assignment[i]]);
 					measured_objects[assignment[i]].assigned = true;
 					object new_object = measured_objects[assignment[i]];
@@ -178,7 +183,13 @@ public:
 					
 					new_object.id = predicted_objects[i].id;
 					new_object.is_target = predicted_objects[i].is_target;
-					new_object.vel = update_velocity(known_objects[i], new_object, passed_time, difference_transform); //attentoN!!!!!!!!!!!!!!!!
+					
+					
+					new_object.kf = predicted_objects[i].kf;
+					update_kalman(new_object, passed_time);
+					
+					new_object.vel = update_velocity(known_objects[i], new_object, passed_time, difference_transform);
+					
 					new_object.last_pos_change = calculate_2_point_distance(new_object.pos,known_objects[i].pos);
 					if(is_leg(new_object)) {
 						new_objects.push_back(new_object);
@@ -197,6 +208,8 @@ public:
 					measured_objects[i].assigned = true;
 					measured_objects[i].id = id_count;
 					id_count++;
+					measured_objects[i].kf = init_kalman(measured_objects[i], passed_time);
+					
 					new_objects.push_back(measured_objects[i]);
 				}
 			}
@@ -208,6 +221,7 @@ public:
 			//--------------------------publish and visualize results-----------------------------------				
 			publish_target_pos(msg.header, known_objects);
 			visualize_target(known_objects, msg.header);
+			visualize_pred_way(msg.header, known_objects, passed_time);
 			visualize_ids(known_objects,msg.header);
 		}
 		
@@ -227,9 +241,9 @@ public:
 //****************************************************************************************************//	
 //-----------------------------HELPER-FUNCTIONS-------------------------------------------------------//
 //****************************************************************************************************//
-	void init_kallman(object new_object, float passed_time) {
+	KalmanFilter init_kalman(object new_object, float passed_time) {
 	 	int n = 4; // Number of states
-		int m = 4; // Number of measurements
+		int m = 2; // Number of measurements
 
 		double dt = passed_time; // Time step
 
@@ -241,27 +255,44 @@ public:
 		
 		
 		// Discrete LTI projectile motion, measuring position only
-		A << 1, 0, dt, 0, 0, 1, 0, dt, 0, 0, 1, 0, 0, 0, 0, 1;
-		C << pow(dt,2.0)/2 , 0, 0, pow(dt,2.0)/2, dt, 0, 0, dt;
+		A << 1,0,dt,0,  0,1,0,dt,  0,0,1,0,  0,0,0,1;
+		C << 1,0,0,0,  0,1,0,0;
 
+
+		float t_4 = pow(dt,4)/4;
+		float t_3 = pow(dt,3)/2;
+		float t_2 = pow(dt,2);
+		
 		// Reasonable covariance matrices
-		Q << .05, .05, .0, .05, .05, .0, .0, .0, .0;
-		R << 5;
-		P << .1, .1, .1, .1, 10000, 10, .1, 10, 100;
+		Q << t_4,.0,t_3,.0,  .0,t_4,.0,t_3,  t_3,.0,t_2,.0,  .0,t_3,.0,t_2;
+		R << 1,0,  0,1;
+		P << .1,.0,.0,.0,  .0,.1,.0,.0,  .0,.0,.1,.0,  .0,.0,.0,.1;
 	
 		 // Construct the filter
-		//KalmanFilter kf(A, C, Q, R, P);
+		KalmanFilter kf(dt, A, C, Q, R, P);
 	
 	
 		// Best guess of initial states
-		//Eigen::VectorXd x0(n);
-		//x0 << new_object.pos.x, new_object.pos.y, 0, 0;
-		//kf.init(x0);
+		Eigen::VectorXd x0(n);
+		x0 << new_object.pos.x, new_object.pos.y, 0.0, 0.0;
+		kf.init(0.0, x0);
 	
+		return kf;
 	}
 	
-	
-	
+	void update_kalman(object& obj, const float passed_time) {
+		float dt = passed_time + obj.last_seen;
+		
+		int n = 4;
+		int m = 2; // Number of measurements
+		Eigen::MatrixXd A(n, n); // System dynamics matrix
+		A << 1,0,dt,0,  0,1,0,dt,  0,0,1,0,  0,0,0,1;
+		
+		Eigen::VectorXd y(m);	
+		y << obj.pos.x, obj.pos.y;		
+		obj.kf.update(y, dt, A);
+	}
+		
 	bool is_leg(object obj) {
 		if(obj.is_target || propability_average(obj.propability_history) > tracking_propability_treshold || propability_max(obj.propability_history) > target_propability_treshold) {
 			return true;
@@ -309,7 +340,7 @@ public:
 	
 		//solve linear assignment problem
 		double cost = HungAlgo.Solve(costMatrix, assignment);
-		ROS_INFO("assignment cost: %lf", cost);
+		//ROS_INFO("assignment cost: %lf", cost);
 
 		//unassign if over treshold
 		for(int i = 0; i<assignment.size();i++) {
@@ -368,7 +399,9 @@ public:
 			new_measurement.vel = zero_vel;
 			new_measurement.propability_history.push(segment.class_id);
 			new_measurement.distance = segment.distance_to_origin;
-			measured_objects.push_back(new_measurement);
+			
+			if(new_measurement.propability_history.back() > 0.5)
+				measured_objects.push_back(new_measurement);
 		}
 		return measured_objects;
 	}
@@ -379,6 +412,7 @@ public:
 		object new_object = old_object;
 		new_object.last_seen += passed_time;
 		if(new_object.last_seen < delete_treshold) {
+			//update_kalman(new_object, passed_time);
 			new_object.vel.x = 0.0;//new_object.vel.x/2;
 			new_object.vel.y = 0.0;//new_object.vel.y/2;
 			new_object.vel.z = 0.0;//new_object.vel.z/2;
@@ -396,20 +430,24 @@ public:
 	
 	geometry_msgs::Point32 update_velocity(object old_obj, object new_obj, float passed_time, tf::Transform transform)
 	{
-		
 		if(old_obj.pos.x == 0.0 && old_obj.pos.y == 0.0 && old_obj.pos.z == 0.0 ) {
 			return old_obj.pos;
 		}
 		passed_time = passed_time + old_obj.last_seen;
 		
-		old_obj.pos = apply_rotation_change(old_obj.pos, transform.getBasis());
-		old_obj.pos = apply_translation_change(old_obj.pos, transform.getOrigin());
+		//old_obj.pos = apply_rotation_change(old_obj.pos, transform.getBasis());
+		//old_obj.pos = apply_translation_change(old_obj.pos, transform.getOrigin());
 				
 		geometry_msgs::Point32 vel;
+		
 		vel.x = (new_obj.pos.x - old_obj.pos.x)/passed_time/2;
 		vel.y = (new_obj.pos.y - old_obj.pos.y)/passed_time/2;
 		vel.z = (new_obj.pos.z - old_obj.pos.z)/passed_time/2;
 		
+		//use kalman velocity (needs map coordinate system)
+		//vel.x = new_obj.kf.state().transpose()[2];
+		//vel.y = new_obj.kf.state().transpose()[3];
+
 		
 		//ROS_INFO("vel: (%f,%f), old_pos: (%f,%f), new_pos: (%f,%f), passed_time: %f",vel.x, vel.y, old_obj.pos.x, old_obj.pos.y, new_obj.pos.x, new_obj.pos.y, passed_time);
 		return vel;		
@@ -417,7 +455,7 @@ public:
 
 	void mark_target(std::vector<object>& known_objects) {
 		int n_target_found = 0;
-		ROS_INFO("n_objects %lu",known_objects.size());
+		//ROS_INFO("n_objects %lu",known_objects.size());
 		if(known_objects.size() == 0)
 			return;
 		
@@ -426,7 +464,7 @@ public:
 				n_target_found += 1;
 			}
 		}
-		ROS_INFO("n_target %i",n_target_found);
+		//ROS_INFO("n_target %i",n_target_found);
 		
 		if(n_target_found <= 0) {
 			n_target_found = 0;
@@ -484,7 +522,7 @@ public:
 			
 			
 			float distance = calculate_2_point_distance(known_objects[id_target_1].pos,known_objects[id_target_2].pos);
-			ROS_INFO("2 target distance: %f",distance);
+			//ROS_INFO("2 target distance: %f",distance);
 			if(distance >= legs_max_distance) {
 				if(known_objects[id_target_1].last_pos_change > known_objects[id_target_2].last_pos_change) {
 					known_objects[id_target_1].is_target = false;
@@ -569,17 +607,7 @@ public:
 				predicted_obj.pos = apply_rotation_change(predicted_obj.pos,difference_transform.getBasis());
 				predicted_obj.vel = apply_rotation_change(predicted_obj.vel,difference_transform.getBasis());
 				predicted_obj.pos = apply_translation_change(predicted_obj.pos,difference_transform.getOrigin());
-				
-				//tf::Vector3 tf_pos(predicted_obj.pos.x,predicted_obj.pos.y,predicted_obj.pos.z);
-			  //tf_pos = tf_pos*difference_transform.getBasis();
-			  //tf_pos = tf_pos+difference_transform.getOrigin();
-			  
-			  
-			  //predicted_obj.pos.x = tf_pos.x();
-			  //predicted_obj.pos.y = tf_pos.y();
-			  //predicted_obj.pos.z = tf_pos.z();
-			  
-			  transformed_objects.push_back(predicted_obj);
+				transformed_objects.push_back(predicted_obj);
 			}
 			
 
@@ -699,7 +727,7 @@ public:
 		//ROS_INFO("target visualization published");
 	}
 	
-	void visualize_pred_way(std_msgs::Header header,const std::vector<object> known_objects, const std::vector<object> predicted_objects) {
+	void visualize_pred_way(std_msgs::Header header,const std::vector<object> known_objects, float passed_time) {
 		
 		visualization_msgs::MarkerArray pred_way_arrow_array;
 		visualization_msgs::Marker del_arrow;
@@ -726,9 +754,9 @@ public:
 				pred_way_arrow_start.y = known_objects[i].pos.y;
 				pred_way_arrow_start.z = known_objects[i].pos.z;
 		
-				pred_way_arrow_end.x = predicted_objects[i].pos.x;
-				pred_way_arrow_end.y = predicted_objects[i].pos.y;
-				pred_way_arrow_end.z = predicted_objects[i].pos.z;
+				pred_way_arrow_end.x = known_objects[i].pos.x + known_objects[i].vel.x*passed_time;
+				pred_way_arrow_end.y = known_objects[i].pos.y + known_objects[i].vel.y*passed_time;
+				pred_way_arrow_end.z = known_objects[i].pos.z + known_objects[i].vel.z*passed_time;
 				pred_way_arrow.points.push_back(pred_way_arrow_start);
 				pred_way_arrow.points.push_back(pred_way_arrow_end);
 		

@@ -62,9 +62,9 @@ public:
 			
 			
 			if(abs(angle)<0.2 && target_msg.pos.x > 1.0)
-				vel_msg.linear.x = 0.4; // move to target
+				vel_msg.linear.x = 0.2; // move to target
 			else if(abs(angle)<0.4 && target_msg.pos.x > 1.0)
-				vel_msg.linear.x = 0.2; // move to target slow
+				vel_msg.linear.x = 0.1; // move to target slow
 			else
 				vel_msg.linear.x = 0.0;
 				
@@ -75,8 +75,6 @@ public:
 	
 	void ultraSonicCallback(const sensor_msgs::PointCloud &us_msg)
 	{
-	
-		
 		float min_distance = std::numeric_limits<float>::infinity();
 		for(int i = 0; i < us_msg.points.size(); i++) {
 			float distance = sqrt(pow(us_msg.points[i].x,2.0)+pow(us_msg.points[i].y,2.0));

@@ -69,7 +69,7 @@ public:
 				
 				data_pub.publish(point_cloud);
 				
-				ros::Rate wait_rate(16);
+				ros::Rate wait_rate(8);
 				//wait_rate.sleep();
 			}
 			ROS_INFO("%i scans published from file",count);
