@@ -111,12 +111,12 @@ public:
 			geometry_msgs::Point32 center = segments_msg.segments[ii].center;
 			//18) Nearest Distance
 			float nearest_distance = std::numeric_limits<float>::infinity();
-			int nearest_neghbour_id = ii;
+			int nearest_neghbour_id = -1;
 			for(int j= 0; j < boost::size(segments_msg.segments); j++) {
 				geometry_msgs::Point32 other_center = segments_msg.segments[j].center;
 					if(ii!=j) {
 						float distance = calculate_2_point_distance(center,other_center);
-						if(distance < nearest_distance) {
+						if(distance < nearest_distance && distance > 0.0) {
 							nearest_distance = distance;
 							nearest_neghbour_id = j;
 						} 
@@ -129,7 +129,8 @@ public:
 		
 		for(int ii= 0; ii < boost::size(segments_msg.segments); ii++) {
 			float nn_id = segments_msg.segments[ii].nearest_neghbour_id;
-			
+			if(nn_id == -1)
+				continue;
 			segments_msg.segments[ii].nn_number_of_points										= segments_msg.segments[nn_id].number_of_points;
 			segments_msg.segments[ii].nn_std_deviation											= segments_msg.segments[nn_id].std_deviation;
 			segments_msg.segments[ii].nn_mean_average_deviation_from_median = segments_msg.segments[nn_id].mean_average_deviation_from_median;

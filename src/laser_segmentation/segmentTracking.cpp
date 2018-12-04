@@ -31,7 +31,7 @@
 TO DO:
 -to prevent assignment at any cost -> include meassure not available cost //study source again
 
--over max_cost_treshhold (curr deassign )  cost to high not infinity/UPPER ONE
+-over max_cost_treshhold (curr deassign)  set cost to high not infinity/UPPER ONE
 
 -increase frame pulish rate
 
@@ -41,11 +41,15 @@ TO DO:
 -detect merge process -> dont assign 2nd canditate other wise -> stall/delete
 
 -------------------------------do afterclassification improvement----------------------------------------------------------
--improve cost_function -> appearance/propability(better classifier needed)
+-improve cost_function (different calc/ if difference low -> lower cost)
+-check if is_target chekci s need during isleg algorithm
+
+
+test for high_res_up
 
 --------------------------------do after rest-------------------------------------------------------------------
 -improve gating current > max_cost -> later > kalman predict area
--limit velocity to reasonable value/ calculate better fix bug !!!!!!!!!!!!!!!!!!!!!!!!!!
+-limit velocity to reasonable value/ calculate better/fix bug !!!!!!!!!!!!!!!!!!!!!!!!!!
 -link no match cost to velocity/time not to distance
 
 */
@@ -59,6 +63,7 @@ private:
 	ros::Publisher pred_way_pub;
 	ros::Publisher id_text_pub;
 	ros::Publisher target_pub;
+	ros::Publisher avg_prob_pub;
 	
 	HungarianAlgorithm HungAlgo;
 	
@@ -105,13 +110,14 @@ public:
 		target_marker_pub = n.advertise<visualization_msgs::MarkerArray>("/target_marker", 1, true);
 		pred_way_pub = n.advertise<visualization_msgs::MarkerArray>("/pred_way_marker", 1, true);
 		id_text_pub = n.advertise<visualization_msgs::MarkerArray>("/id_text_markers", 1, true);
+		avg_prob_pub = n.advertise<visualization_msgs::MarkerArray>("/avg_prob_markers", 1, true);
 		
 		sub = n.subscribe("/classified_segments", 10, &SegmentTracking::pointCloudCallback, this);
 		
 		
 		object cost_calc_obj_1;
 		object cost_calc_obj_2;
-		cost_calc_obj_1.pos.x = 1;
+		cost_calc_obj_1.pos.x = 1.0;
 		no_match_cost = calculate_cost(cost_calc_obj_1, cost_calc_obj_2); //calcuclate max cost for assignment by distance of dummy objects
 		ROS_INFO("no_match_cost: %f",no_match_cost);
 	}
@@ -127,9 +133,10 @@ public:
 		auto time_1 = std::chrono::high_resolution_clock::now();
 		ros::Time new_time_laser = msg.odom.header.stamp;
 		double passed_time = (new_time_laser-last_time_laser).toSec();
-		if(last_time_laser == ros::Time(0))
+		if(last_time_laser == ros::Time(0)||passed_time <= 0.0) {
 			passed_time = 0.0;
-		
+			reset_target();
+		}
 		
 		ROS_INFO("passed_time:%lf",passed_time);
 		last_time_laser = new_time_laser;
@@ -154,7 +161,7 @@ public:
 		if(known_objects.empty()) {
 			id_count = 1;
 			for(int i =0; i<measured_objects.size(); i++) {
-				if(measured_objects[i].propability_history.back() > tracking_propability_treshold) {
+				if(is_leg(measured_objects[i])) {
 					object new_object = measured_objects[i];
 					new_object.id = id_count;
 					id_count++;				
@@ -170,7 +177,8 @@ public:
 			predicted_objects = known_objects;
 			predicted_objects = predict_objects(known_objects,passed_time);
 			predicted_objects = apply_transform_change(predicted_objects, difference_transform);
-			vector<int> assignment = find_best_assignment(predicted_objects, measured_objects, new_objects, passed_time);
+			vector<vector<double>> costMatrix = calculate_cost_Matrix(predicted_objects,measured_objects);
+			vector<int> assignment = find_best_assignment(predicted_objects, measured_objects, passed_time, costMatrix);
 
 			//assign best guess to known objects
 			for(int i = 0; i<assignment.size(); i++) {
@@ -204,7 +212,7 @@ public:
 					
 			//if no suitable object for meassurements are found create new objects
 			for(int i = 0; i<measured_objects.size(); i++) {
-				if(measured_objects[i].assigned == false && measured_objects[i].propability_history.back() > tracking_propability_treshold) {
+				if(measured_objects[i].assigned == false && is_leg(measured_objects[i])) {
 					measured_objects[i].assigned = true;
 					measured_objects[i].id = id_count;
 					id_count++;
@@ -223,6 +231,7 @@ public:
 			visualize_target(known_objects, msg.header);
 			visualize_pred_way(msg.header, known_objects, passed_time);
 			visualize_ids(known_objects,msg.header);
+			visualize_avg_propability(known_objects,msg.header);
 		}
 		
 		mark_target(known_objects);
@@ -294,7 +303,7 @@ public:
 	}
 		
 	bool is_leg(object obj) {
-		if(obj.is_target || propability_average(obj.propability_history) > tracking_propability_treshold || propability_max(obj.propability_history) > target_propability_treshold) {
+		if(/*obj.is_target ||*/ propability_average(obj.propability_history) > tracking_propability_treshold || propability_max(obj.propability_history) > target_propability_treshold) {
 			return true;
 		} else {
 	 		return false;
@@ -303,6 +312,11 @@ public:
 	
 	float propability_max(std::queue<float> propability_history) {
 		float max = 0.0;
+		int max_age = 5;
+		while(propability_history.size() > max_age) {
+			propability_history.pop();
+		}
+		
 		while(!propability_history.empty()) {
 			if(propability_history.front()>max)
 			 max = propability_history.front();
@@ -313,7 +327,14 @@ public:
 	
 	float propability_average(std::queue<float> propability_history) {
 		float average = 0.0;
+		int max_age = 5;
+		while(propability_history.size() > max_age) {
+			propability_history.pop();
+		}
+		
+		
 		int count = propability_history.size();
+		
 		while(!propability_history.empty()) {
 			average += propability_history.front()/count;
 			propability_history.pop();
@@ -321,11 +342,8 @@ public:
 		return average;
 	}
 	
-	
-	vector<int> find_best_assignment(vector<object>& predicted_objects, vector<object>& measured_objects, vector<object>& new_objects,const float passed_time) {
+	vector<vector<double>> calculate_cost_Matrix(vector<object>& predicted_objects,vector<object>& measured_objects) {
 		vector< vector<double> > costMatrix;
-		vector<int> assignment;
-
 		//calculate all costs
 		costMatrix.resize(predicted_objects.size());
 		//ROS_INFO("Cost Matrix: \n");
@@ -337,7 +355,12 @@ public:
 			}
 			//std::cout << "\n";
 		}
+		return costMatrix;
+	}
 	
+	
+	vector<int> find_best_assignment(vector<object>& predicted_objects, vector<object>& measured_objects,const float passed_time, vector< vector<double> > costMatrix) {	
+		vector<int> assignment;
 		//solve linear assignment problem
 		double cost = HungAlgo.Solve(costMatrix, assignment);
 		//ROS_INFO("assignment cost: %lf", cost);
@@ -399,9 +422,7 @@ public:
 			new_measurement.vel = zero_vel;
 			new_measurement.propability_history.push(segment.class_id);
 			new_measurement.distance = segment.distance_to_origin;
-			
-			if(new_measurement.propability_history.back() > 0.5)
-				measured_objects.push_back(new_measurement);
+			measured_objects.push_back(new_measurement);
 		}
 		return measured_objects;
 	}
@@ -411,11 +432,11 @@ public:
 	{
 		object new_object = old_object;
 		new_object.last_seen += passed_time;
-		if(new_object.last_seen < delete_treshold) {
+		if(new_object.last_seen < delete_treshold && new_object.is_target) {
 			//update_kalman(new_object, passed_time);
-			new_object.vel.x = 0.0;//new_object.vel.x/2;
-			new_object.vel.y = 0.0;//new_object.vel.y/2;
-			new_object.vel.z = 0.0;//new_object.vel.z/2;
+			new_object.vel.x = new_object.vel.x/3;
+			new_object.vel.y = new_object.vel.y/3;
+			new_object.vel.z = new_object.vel.z/3;
 			new_objects.push_back(new_object);
 		}
 	}
@@ -434,9 +455,6 @@ public:
 			return old_obj.pos;
 		}
 		passed_time = passed_time + old_obj.last_seen;
-		
-		//old_obj.pos = apply_rotation_change(old_obj.pos, transform.getBasis());
-		//old_obj.pos = apply_translation_change(old_obj.pos, transform.getOrigin());
 				
 		geometry_msgs::Point32 vel;
 		
@@ -524,7 +542,17 @@ public:
 			float distance = calculate_2_point_distance(known_objects[id_target_1].pos,known_objects[id_target_2].pos);
 			//ROS_INFO("2 target distance: %f",distance);
 			if(distance >= legs_max_distance) {
-				if(known_objects[id_target_1].last_pos_change > known_objects[id_target_2].last_pos_change) {
+				if(known_objects[id_target_1].last_seen > 0.0) {
+					known_objects[id_target_1].is_target = false;
+					//known_objects.erase(known_objects.begin()+id_target_1);
+				}else if (known_objects[id_target_2].last_seen > 0.0){
+					known_objects[id_target_2].is_target = false;
+					//known_objects.erase(known_objects.begin()+id_target_2);
+				}else if (propability_average(known_objects[id_target_1].propability_history) < tracking_propability_treshold){
+					known_objects[id_target_1].is_target = false;
+				}else if (propability_average(known_objects[id_target_2].propability_history) < tracking_propability_treshold){
+					known_objects[id_target_2].is_target = false;
+				}else if(known_objects[id_target_1].last_pos_change > known_objects[id_target_2].last_pos_change) {
 					known_objects[id_target_1].is_target = false;
 				} else {
 					known_objects[id_target_2].is_target = false;
@@ -624,9 +652,15 @@ public:
 			return predicted_objects;
 	}
 	
-	double calculate_cost(object A, object B){
-		float object_distance = calculate_2_point_distance(A.pos, B.pos);
+	double calculate_cost(object old_obj, object new_obj){
+		float object_distance = calculate_2_point_distance(old_obj.pos, new_obj.pos);
 		double cost = pow(object_distance,2.0);
+		
+		float prob_diff = propability_average(old_obj.propability_history) - propability_average(new_obj.propability_history);
+		
+		if(prob_diff>0.2)
+			cost = cost + (abs(prob_diff*3)*no_match_cost);
+		
 		//ROS_INFO("cost_claclulation: A=(%f,%f,%f), B=(%f,%f,%f), cost=%lf",A.pos.x,A.pos.y,A.pos.z,B.pos.x,B.pos.y,B.pos.z,cost);
 		return cost;
 	}
@@ -675,6 +709,44 @@ public:
 		}
 		
 		id_text_pub.publish(id_text_array);
+		
+	}
+	
+	void visualize_avg_propability(const std::vector<object> known_objects, const std_msgs::Header header) {
+		if(known_objects.empty())
+			return;
+	
+		visualization_msgs::MarkerArray id_text_array;
+		visualization_msgs::Marker id_text;
+		id_text.header = header;
+		id_text.action= id_text.DELETEALL;
+		id_text_array.markers.push_back(id_text);
+		avg_prob_pub.publish(id_text_array);
+		
+		for(auto obj : known_objects) {
+			visualization_msgs::Marker id_text;
+			
+			id_text.header = header;
+			id_text.ns = "avg_propabilty";
+			id_text.action = id_text.ADD;
+			id_text.pose.orientation.w = 1.0;
+			id_text.id = obj.id;
+			id_text.type = id_text.TEXT_VIEW_FACING;
+
+			id_text.scale.z = 0.05;
+	
+			id_text.color.a = 1.0;
+			id_text.color.r = 1.0;
+			id_text.color.g = 1.0;
+			id_text.color.b = 1.0;
+			id_text.text = std::to_string(propability_average(obj.propability_history));
+			id_text.pose.position.x = (obj.pos.x);
+			id_text.pose.position.y = (obj.pos.y);
+			id_text.pose.position.z = (obj.pos.z);
+			id_text_array.markers.push_back(id_text);
+		}
+		
+		avg_prob_pub.publish(id_text_array);
 		
 	}
 	

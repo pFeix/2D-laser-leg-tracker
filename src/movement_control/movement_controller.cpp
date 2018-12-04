@@ -18,8 +18,12 @@ private:
 	ros::Subscriber target_sub;
 	ros::Subscriber us_sub;
 	
-	float stop_threshold = 0.75;
-	bool has_obstacale = false;
+	float stop_threshold = 0.5;
+	float slow_threshold = 0.75;
+	
+	float slow_speed = 0.15;
+	
+	int speed_state = 0; //0= fast 1=slow 2 = stopp
 	ros::Time last_time = ros::Time(0);
 	
 	float max_angular_speed = 1;
@@ -51,7 +55,8 @@ public:
 	
 			//calculate angle
 			float slope = target_msg.pos.y / target_msg.pos.x;
-			float angle = atan(slope);
+			float angle = atan2(target_msg.pos.y,target_msg.pos.x);
+			//float angle = atan(slope);
 			
 			ROS_INFO("angle: %f",angle);
 			
@@ -61,10 +66,10 @@ public:
 			
 			
 			
-			if(abs(angle)<0.2 && target_msg.pos.x > 1.0)
-				vel_msg.linear.x = 0.2; // move to target
-			else if(abs(angle)<0.4 && target_msg.pos.x > 1.0)
-				vel_msg.linear.x = 0.1; // move to target slow
+			if(abs(angle)<0.2 && target_msg.pos.x > 0.85)
+				vel_msg.linear.x = 0.35; // move to target
+			else if(abs(angle)<0.4 && target_msg.pos.x > 0.85)
+				vel_msg.linear.x = 0.15; // move to target slow
 			else
 				vel_msg.linear.x = 0.0;
 				
@@ -88,10 +93,12 @@ public:
 		if (min_distance < stop_threshold) {
 			ROS_INFO("Obstacle detected stopping !");
 			geometry_msgs::Twist vel_msg;
-			has_obstacale = true;
-		} else {
+			speed_state = 2;
+		} else if(min_distance < slow_threshold){
 			//ROS_INFO("No Obstacle moving onward.");
-			has_obstacale = false;
+			speed_state = 1;
+		} else {
+			speed_state = 0;
 		}
 		
 		
@@ -99,13 +106,15 @@ public:
 	
 
 	void publish_vel(geometry_msgs::Twist vel_msg) {
-		if(has_obstacale && vel_msg.linear.x > 0.0)
+		if(speed_state >=2 && vel_msg.linear.x > 0.0)
 			vel_msg.linear.x = 0.0;
+		else if(speed_state >=1 && vel_msg.linear.x > 0.0)
+			vel_msg.linear.x = slow_speed;
 		vel_pub.publish(vel_msg);
   }
   
   float k_p = 1.0;
-	float k_d = 0.25;
+	float k_d = 0.40;
 	float k_i = 0.0;
 	float PID_integral = 0.0;
 	float last_offset = 0.0;
