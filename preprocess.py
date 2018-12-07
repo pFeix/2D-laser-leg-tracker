@@ -161,6 +161,7 @@ data_path = os.path.join(ws_path,'Classifiers/'+str(sys.argv[1]).split('/')[-1].
 if not os.path.isdir(data_path):
     os.makedirs (data_path)
 np.save(data_path+str(sys.argv[1]).split('/')[-1].split('.')[0],labled_data);
+joblib.dump(imp, data_path+'imputer.joblib')
 print(type(feature_names))
 with open(data_path+'feature_names.txt', 'w') as f:
     for item in feature_names:

@@ -1,0 +1,3 @@
+<launch>
+	<node pkg="movement_control" type="movement_controller" name="movement_controller" />
+</launch>

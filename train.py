@@ -20,20 +20,20 @@ from sklearn import neighbors
 from sklearn.metrics import confusion_matrix, precision_score, recall_score, accuracy_score
 from sklearn.model_selection import cross_val_score
 from sklearn.pipeline import Pipeline
+from sklearn import preprocessing
 
 
 ws_path = os.path.expanduser('~/robot_host_ws/')
 
 start_time = time.clock()
 #------ressources for pipeline building
-imp = joblib.load('imputer.joblib')
 
 
 classifier = 'RandomForest'
-rescaling = 'no_rescaling'
+rescaling = 'standardize'
 
 if(rescaling != 'no_rescaling' and rescaling != 'standardize'):
-	print('invalid rescaling method!')
+	print('invalid rescaling method! exiting...')
 	exit()
 
 
@@ -44,6 +44,7 @@ try:
 	data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),sys.argv[1])
 	print(data_path)
 	labled_data = np.load(data_path).item()
+	imp = joblib.load(os.path.dirname(data_path)+'/imputer.joblib')
 	print('data loaded')
 except:
 	print(data_path)
@@ -58,30 +59,29 @@ test_lables = labled_data['test_lables']
 feature_names = labled_data['feature_names']
 print('files loaded,name:',str(sys.argv[1]),' , train_size:',len(train_data), ', num_features:',len(feature_names))
 
-if(rescaling=='standardize'):
+if(rescaling=='no_rescaling'):
 	print('standardizing data...')
 	##---------standartize data
-	scaler = preprocessing.StandardScaler().fit(test_data)
-	test_data = scaler.transform(test_data)
+	scaler = preprocessing.StandardScaler().fit(train_data)
+	train_data = scaler.transform(train_data)
 	print('data scaled: parameter: \nmean:\n',scaler.mean_,'\nvariance:\n',scaler.var_)
 
 
-classifiers_dict={'AdaBoost_real':AdaBoostClassifier(DecisionTreeClassifier(max_depth=50),algorithm="SAMME.R",n_estimators=250),
+classifiers_dict={'AdaBoost_real':AdaBoostClassifier(DecisionTreeClassifier(max_depth=25),algorithm="SAMME.R",n_estimators=250),
 									'AdaBoost_discrete':AdaBoostClassifier(DecisionTreeClassifier(max_depth=1),algorithm="SAMME",n_estimators=50),
-									'GradientTree':GradientBoostingClassifier(n_estimators=50, learning_rate=1.0,max_depth=1, random_state=0,verbose=1),
+									'GradientTree':GradientBoostingClassifier(n_estimators=50, learning_rate=1.0,max_depth=5, random_state=0,verbose=1),
 									'RandomForest':RandomForestClassifier(n_estimators=50,max_depth=None,verbose=1,n_jobs=-1,class_weight=None,max_features= "auto"),
-									'Neighbors':neighbors.KNeighborsClassifier(50, weights='uniform' ,n_jobs=-1),
+									'Neighbors':neighbors.KNeighborsClassifier(5, weights='uniform' ,n_jobs=6),
 									'linearSVC':svm.LinearSVC(verbose = True),
 									'NB':GaussianNB(),
 									'Neural':MLPClassifier(verbose=True),
-									'Gauss':GaussianProcessClassifier(1.0 * RBF(1.0),n_jobs=-1), #memory error
 									'QDA':QuadraticDiscriminantAnalysis(),
-									'DecissionTree':DecisionTreeClassifier(max_depth=1)							
+									'DecissionTree':DecisionTreeClassifier(max_depth=50)							
 									}
 
 clf = classifiers_dict[classifier]
 
-clf_path = os.path.join(ws_path,'Classifiers/'+str(sys.argv[1]).split('.')[0]+'_'+str(len(feature_names))+'/'+classifier+'_'+rescaling+'/')
+clf_path = os.path.join(ws_path,'Classifiers/'+str(sys.argv[1]).split('/')[-1].split('.')[0]+'_'+str(len(feature_names))+'/'+classifier+'_'+rescaling+'/')
 
 
 if hasattr(clf, 'n_estimators'):

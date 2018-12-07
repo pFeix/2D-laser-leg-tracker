@@ -94,11 +94,11 @@ public:
 			segment_msg.mean_angular_difference = calculate_mean_angular_difference(msg.segments[i],segment_msg.number_of_points);
 			//14) ------- not necessary  Mean speed
 			
-			//15) Kurtosis wikipedia
+			//14) Kurtosis wikipedia
 			segment_msg.kurtosis = calculate_Kurtosis(msg.segments[i], segment_msg.number_of_points, center, segment_msg.std_deviation);
-			//16) Aspect Ratio
+			//15) Aspect Ratio
 			segment_msg.aspect_ratio = calculate_aspect_ratio(msg.segments[i], segment_msg.number_of_points, line_params);
-			//17) Sum of Distances
+			//16) Sum of Distances
 			segment_msg.sum_of_distances = segment_msg.jump_distance_preceeding + segment_msg.jump_distance_succeeding;
 			 
 			
@@ -109,7 +109,7 @@ public:
 		
 		for(int ii= 0; ii < boost::size(segments_msg.segments); ii++) {
 			geometry_msgs::Point32 center = segments_msg.segments[ii].center;
-			//18) Nearest Distance
+			//17) Nearest Distance
 			float nearest_distance = std::numeric_limits<float>::infinity();
 			int nearest_neghbour_id = -1;
 			for(int j= 0; j < boost::size(segments_msg.segments); j++) {
@@ -145,7 +145,7 @@ public:
 			segments_msg.segments[ii].nn_aspect_ratio												= segments_msg.segments[nn_id].aspect_ratio;
 			segments_msg.segments[ii].nn_kurtosis														= segments_msg.segments[nn_id].kurtosis;
 		}
-		/*
+		
 		for(int ii= 0; ii < boost::size(segments_msg.segments); ii++) {
 			laser_features::Segment_featured segment_msg = segments_msg.segments[ii];
 			float norm_var = segment_msg.distance_to_origin;
@@ -207,7 +207,7 @@ public:
 			segment_msg.mlp_number_kurtosis					= segment_msg.kurtosis*norm_var;
 			
 			segments_msg.segments[ii] = segment_msg;
-		}*/
+		}
 		auto time_2 = std::chrono::high_resolution_clock::now();
 		float execution_time = std::chrono::duration_cast<std::chrono::microseconds>(time_2 - time_1).count();
 		ROS_INFO("Execution time (microseconds): %f",execution_time);//float e_t = execution_time.count();

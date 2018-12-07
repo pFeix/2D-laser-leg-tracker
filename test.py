@@ -41,6 +41,10 @@ feature_names = labled_data['feature_names']
 print('files loaded')
 feature_count = len(feature_names)
 
+if(hasattr(pip,'scale_data')):
+	scaler = pip.named_steps['scale_data']
+	test_data = scaler.transform(test_data)
+	
 clf = pip.named_steps['classifiy_data']
 clf_params = clf.get_params()
 
@@ -51,7 +55,7 @@ invert_op = getattr(clf, "staged_predict", None)
 has_staged = callable(invert_op)
 
 if has_staged:
-	test_pred = np.array(list(pip.staged_predict(test_data)))
+	test_pred = np.array(list(clf.staged_predict(test_data)))
 	last_test_pred = test_pred[-1]
 else:
 	last_test_pred = test_pred = pip.predict(test_data)
@@ -79,22 +83,23 @@ def plot_confusion_matrix(cm, classes,
                           title='Confusion matrix',
                           cmap=plt.cm.Blues):
     
-	plt.figure(2,figsize=(10,10))
+	plt.figure(2,figsize=(5,5))
 	"""
 	This function prints and plots the confusion matrix.
 	Normalization can be applied by setting `normalize=True`.
 	"""
+	'''
 	if normalize:
 		  cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
 		  print("Normalized confusion matrix")
 	else:
 		  print('Confusion matrix, without normalization')
-
-	print(cm)
+	'''
+	#print(cm)
 
 	plt.imshow(cm, interpolation='nearest', cmap=cmap)
-	plt.title(title)
-	plt.colorbar()
+	#plt.title(title)
+	#plt.colorbar()
 	tick_marks = np.arange(len(classes))
 	plt.xticks(tick_marks, classes, rotation=45)
 	plt.yticks(tick_marks, classes)

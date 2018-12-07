@@ -67,7 +67,7 @@ public:
 			
 			
 			if(abs(angle)<0.2 && target_msg.pos.x > 0.85)
-				vel_msg.linear.x = 0.35; // move to target
+				vel_msg.linear.x = 0.30; // move to target
 			else if(abs(angle)<0.4 && target_msg.pos.x > 0.85)
 				vel_msg.linear.x = 0.15; // move to target slow
 			else
@@ -114,7 +114,7 @@ public:
   }
   
   float k_p = 1.0;
-	float k_d = 0.40;
+	float k_d = 0.30;
 	float k_i = 0.0;
 	float PID_integral = 0.0;
 	float last_offset = 0.0;

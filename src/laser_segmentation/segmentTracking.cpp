@@ -29,27 +29,20 @@
 
 /*
 TO DO:
--to prevent assignment at any cost -> include meassure not available cost //study source again
-
--over max_cost_treshhold (curr deassign)  set cost to high not infinity/UPPER ONE
-
 -increase frame pulish rate
-
  
 --------------------------------do after rest/segmentation-----------------------------------
-
 -detect merge process -> dont assign 2nd canditate other wise -> stall/delete
 
 -------------------------------do afterclassification improvement----------------------------------------------------------
 -improve cost_function (different calc/ if difference low -> lower cost)
 -check if is_target chekci s need during isleg algorithm
 
-
 test for high_res_up
 
 --------------------------------do after rest-------------------------------------------------------------------
 -improve gating current > max_cost -> later > kalman predict area
--limit velocity to reasonable value/ calculate better/fix bug !!!!!!!!!!!!!!!!!!!!!!!!!!
+-limit velocity to reasonable value ?
 -link no match cost to velocity/time not to distance
 
 */
@@ -178,7 +171,7 @@ public:
 			predicted_objects = predict_objects(known_objects,passed_time);
 			predicted_objects = apply_transform_change(predicted_objects, difference_transform);
 			vector<vector<double>> costMatrix = calculate_cost_Matrix(predicted_objects,measured_objects);
-			vector<int> assignment = find_best_assignment(predicted_objects, measured_objects, passed_time, costMatrix);
+			vector<int> assignment = find_best_assignment(costMatrix);
 
 			//assign best guess to known objects
 			for(int i = 0; i<assignment.size(); i++) {
@@ -196,7 +189,7 @@ public:
 					new_object.kf = predicted_objects[i].kf;
 					update_kalman(new_object, passed_time);
 					
-					new_object.vel = update_velocity(known_objects[i], new_object, passed_time, difference_transform);
+					new_object.vel = update_velocity(known_objects[i], new_object, passed_time, difference_transform, costMatrix[i], measured_objects);
 					
 					new_object.last_pos_change = calculate_2_point_distance(new_object.pos,known_objects[i].pos);
 					if(is_leg(new_object)) {
@@ -359,7 +352,7 @@ public:
 	}
 	
 	
-	vector<int> find_best_assignment(vector<object>& predicted_objects, vector<object>& measured_objects,const float passed_time, vector< vector<double> > costMatrix) {	
+	vector<int> find_best_assignment(vector< vector<double> > costMatrix) {	
 		vector<int> assignment;
 		//solve linear assignment problem
 		double cost = HungAlgo.Solve(costMatrix, assignment);
@@ -441,6 +434,7 @@ public:
 		}
 	}
 	
+	
 	geometry_msgs::Point32 predict_position(geometry_msgs::Point32 pos, const geometry_msgs::Point32 vel, const float passed_time) 
 	{
 		pos.x = pos.x + vel.x*passed_time;
@@ -449,18 +443,75 @@ public:
 		return pos;
 	}
 	
-	geometry_msgs::Point32 update_velocity(object old_obj, object new_obj, float passed_time, tf::Transform transform)
+	
+	vector<double> convert_cost_to_score(vector<double> cost_array) {
+		vector<double> match_score_array;	
+		for(auto cost : cost_array) {
+			if(cost == 0.0)
+				cost = 0.000001;
+			match_score_array.push_back(no_match_cost/cost);
+		}
+		return match_score_array;
+	}
+	
+	
+	vector<double> calculate_propabilities(vector<double> match_score_array) {
+		vector<double> propabilities_array;
+		double sum = 0.0;
+		for(auto score : match_score_array) {
+			if(score >= 1.0) //only consider values in gating area
+				sum += score;
+		}
+		for(auto score : match_score_array) {
+			if(score >= 1.0)
+				propabilities_array.push_back(score/sum);
+			else
+				propabilities_array.push_back(-1);	//not in gating area
+		}
+		return propabilities_array;
+	}
+	
+	
+	geometry_msgs::Point32 calculate_weighted_velocity(vector<double> propabilities_array, object old_obj, std::vector<object> measured_objects, float passed_time) {
+		geometry_msgs::Point32 vel;
+		measured_objects.push_back(old_obj); //add old state as option for propability that no meassurement can be assigned
+		
+		for(int i = 0; i < propabilities_array.size(); i++) {
+			if(propabilities_array[i]> 0.0) { //exclude if out of gating area
+				vel.x += (measured_objects[i].pos.x - old_obj.pos.x)/passed_time * propabilities_array[i];
+				vel.y += (measured_objects[i].pos.y - old_obj.pos.y)/passed_time * propabilities_array[i];
+				vel.z += (measured_objects[i].pos.z - old_obj.pos.z)/passed_time * propabilities_array[i];
+			}
+		}
+		
+	
+		ROS_INFO("vel= x:%f, y:%f, z:%f",vel.x, vel.y, vel.z);
+		return vel;
+	}
+	
+	geometry_msgs::Point32 update_velocity(object old_obj, object new_obj, float passed_time, tf::Transform transform, vector<double> cost_array, std::vector<object> measured_objects)
 	{
 		if(old_obj.pos.x == 0.0 && old_obj.pos.y == 0.0 && old_obj.pos.z == 0.0 ) {
 			return old_obj.pos;
 		}
+		geometry_msgs::Point32 vel;
 		passed_time = passed_time + old_obj.last_seen;
 				
-		geometry_msgs::Point32 vel;
+				
+		vector<double> match_score_array = convert_cost_to_score(cost_array);
+		match_score_array.push_back(1.0); //add propability that no objects matches
+		vector<double> propabilities_array = calculate_propabilities(match_score_array);
+				
+		old_obj.pos = apply_rotation_change(old_obj.pos,transform.getBasis());
+		old_obj.pos = apply_translation_change(old_obj.pos,transform.getOrigin());		
 		
-		vel.x = (new_obj.pos.x - old_obj.pos.x)/passed_time/2;
-		vel.y = (new_obj.pos.y - old_obj.pos.y)/passed_time/2;
-		vel.z = (new_obj.pos.z - old_obj.pos.z)/passed_time/2;
+		//use propability based approach
+		vel = calculate_weighted_velocity(propabilities_array, old_obj, measured_objects, passed_time);
+		
+		//use normal 1step velocity update
+		//vel.x = (new_obj.pos.x - old_obj.pos.x)/passed_time/2;
+		//vel.y = (new_obj.pos.y - old_obj.pos.y)/passed_time/2;
+		//vel.z = (new_obj.pos.z - old_obj.pos.z)/passed_time/2;
 		
 		//use kalman velocity (needs map coordinate system)
 		//vel.x = new_obj.kf.state().transpose()[2];

@@ -1,0 +1,8 @@
+<launch>
+	<node pkg="rosaria" type="RosAria" name="p3dx_connect" args="_port:=157.253.173.241:8101 _publish_aria_lasers:=true"/>
+	<node pkg="laser_segmentation" type="laser_segmentator" name="point_cloud_segmentation" />
+	<node pkg="laser_features" type="feature_calculator" name="feature_calculator" />
+	<node pkg="laser_features" type="scan_classifier.py" name="segment_classifier" />
+	<node pkg="laser_segmentation" type="segment_tracker" name="segment_tracker" />
+	<!-- <node pkg="movement_control" type="movement_controller" name="movement_controller" />-->
+</launch>

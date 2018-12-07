@@ -7,16 +7,19 @@ from sklearn.feature_extraction import DictVectorizer
 from laser_features.msg import Featured_segments
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
+import os
 
+path = os.path.dirname(os.path.abspath(__file__))
+print(path)
 pub = rospy.Publisher('/classified_segments', Featured_segments, queue_size=10)
 marker_pub = rospy.Publisher('/class_marker', Marker, queue_size=10)
 text_marker_pub = rospy.Publisher('/text_class_marker', MarkerArray, queue_size=1)
 
 vec = DictVectorizer()
 #scaler = joblib.load('scaler.joblib')
-imp = joblib.load('imputer.joblib')
+#imp = joblib.load('imputer.joblib')
 #clf = joblib.load('classifier.joblib')
-pip = joblib.load('pipeline.joblib')
+pip = joblib.load(path+'/pipeline.joblib')
 
 
 def callback(data):	
@@ -124,7 +127,7 @@ def callback(data):
 		#scaled_data = scaler.transform(vec_data)
 
 		##---------impute missing data
-		vec_data = imp.transform(vec_data)
+		#vec_data = imp.transform(vec_data)
 		
 		##---------predict class
 		#i.class_id = clf.predict(scaled_data)
