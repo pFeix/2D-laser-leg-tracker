@@ -4,5 +4,4 @@
 	<node pkg="laser_features" type="feature_calculator" name="feature_calculator" />
 	<node pkg="laser_features" type="scan_classifier.py" name="segment_classifier" />
 	<node pkg="laser_segmentation" type="segment_tracker" name="segment_tracker" />
-	<!-- <node pkg="movement_control" type="movement_controller" name="movement_controller" />-->
 </launch>

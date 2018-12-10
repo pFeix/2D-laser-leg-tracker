@@ -33,7 +33,7 @@ private:
 
 
 public:
-	bool follow_target = false;
+	bool follow_target = true;
 
 	MovementController() {
 		vel_pub = n.advertise<geometry_msgs::Twist>("/RosAria/cmd_vel",1);

@@ -77,7 +77,8 @@ private:
 	std::vector<object> known_objects;
 	
 	float target_propability_treshold = 0.9;
-	float tracking_propability_treshold = 0.7;
+	float tracking_propability_treshold = 0.65;
+	float max_prop_diff = 0.3;
 	
 	float init_max_distance = 1.5;
 	float legs_max_distance = 0.5;
@@ -709,7 +710,7 @@ public:
 		
 		float prob_diff = propability_average(old_obj.propability_history) - propability_average(new_obj.propability_history);
 		
-		if(prob_diff>0.2)
+		if(prob_diff>max_prop_diff)
 			cost = cost + (abs(prob_diff*3)*no_match_cost);
 		
 		//ROS_INFO("cost_claclulation: A=(%f,%f,%f), B=(%f,%f,%f), cost=%lf",A.pos.x,A.pos.y,A.pos.z,B.pos.x,B.pos.y,B.pos.z,cost);
